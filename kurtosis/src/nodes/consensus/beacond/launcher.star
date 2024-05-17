@@ -3,6 +3,11 @@ execution = import_module("../../execution/execution.star")
 node = import_module("./node.star")
 bash = import_module("../../../lib/bash.star")
 
+DEFAULT_MAX_CPU = 1000
+DEFAULT_MAX_MEMORY = 4096
+DEFAULT_MIN_CPU = 500
+DEFAULT_MIN_MEMORY = 1024
+
 COMETBFT_RPC_PORT_NUM = 26657
 COMETBFT_P2P_PORT_NUM = 26656
 COMETBFT_GRPC_PORT_NUM = 9090
@@ -44,6 +49,10 @@ def get_config(image, engine_dial_url, cl_service_name, entrypoint = [], cmd = [
         files = files,
         entrypoint = entrypoint,
         cmd = cmd,
+        min_cpu = DEFAULT_MIN_CPU,
+        max_cpu = DEFAULT_MAX_CPU,
+        min_memory = DEFAULT_MIN_MEMORY,
+        max_memory = DEFAULT_MAX_MEMORY,
         env_vars = {
             "BEACOND_MONIKER": cl_service_name,
             "BEACOND_NET": "VALUE_2",
@@ -62,6 +71,43 @@ def get_config(image, engine_dial_url, cl_service_name, entrypoint = [], cmd = [
     )
 
     return config
+
+def perform_genesis_ceremony_parallel(plan, validators, jwt_file):
+    num_validators = len(validators)
+
+    node_peering_info = []
+    beacond_configs = []
+    stored_configs = []
+
+    for n in range(num_validators):
+        beacond_configs.append("node-beacond-config-{}".format(n))
+        stored_configs.append(StoreSpec(src = "/tmp/config{}".format(n), name = beacond_configs[n]))
+
+    stored_configs.append(StoreSpec(src = "/tmp/config_genesis/.beacond/config/genesis.json", name = "cosmos-genesis-final"))
+
+    multiple_gentx_file = plan.upload_files(
+        src = "./scripts/multiple-gentx.sh",
+        name = "multiple-gentx",
+        description = "Uploading multiple-gentx script",
+    )
+
+    multiple_gentx_env_vars = node.get_genesis_env_vars("cl-validator-beaconkit-0")
+    multiple_gentx_env_vars["NUM_VALS"] = str(num_validators)
+
+    plan.print(multiple_gentx_env_vars)
+    plan.print(stored_configs)
+
+    plan.run_sh(
+        run = "chmod +x /app/scripts/multiple-gentx.sh && /app/scripts/multiple-gentx.sh",
+        image = validators[0].cl_image,
+        files = {
+            "/app/scripts": "multiple-gentx",
+            "/root/eth_genesis": "genesis_file",
+        },
+        env_vars = multiple_gentx_env_vars,
+        store = stored_configs,
+        description = "Collecting beacond genesis files",
+    )
 
 def perform_genesis_ceremony(plan, validators, jwt_file):
     num_validators = len(validators)

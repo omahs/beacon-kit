@@ -27,21 +27,27 @@ validators:
   - el_type: besu
     cl_type: beaconkit
     cl_image: beacond:kurtosis-local
+    replicas: 2
   - el_type: nethermind
     cl_type: beaconkit
     cl_image: beacond:kurtosis-local
+    replicas: 2
   - el_type: reth
     cl_type: beaconkit
     cl_image: beacond:kurtosis-local
+    replicas: 2
   - el_type: geth
     cl_type: beaconkit
     cl_image: beacond:kurtosis-local
+    replicas: 2
   - el_type: erigon
     cl_type: beaconkit
     cl_image: beacond:kurtosis-local
+    replicas: 2
   - el_type: ethereumjs
     cl_type: beaconkit
-    cl_image: beacond:kurtosis-local  
+    cl_image: beacond:kurtosis-local
+    replicas: 2
 full_nodes:
   - el_type: reth
     cl_type: beaconkit

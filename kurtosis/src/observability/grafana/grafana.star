@@ -1,8 +1,8 @@
 CONFIG_DIR_PATH = "/config"
 DASHBOARDS_DIR_PATH = "/dashboards"
 
-def start(plan, prometheus_url):
-    run(plan, prometheus_url, "github.com/berachain/helm-charts/grafana-dashboards")
+# def start(plan, prometheus_url):
+#   run(plan, prometheus_url, "github.com/berachain/helm-charts/grafana-dashboards")
 
 def run(
         plan,

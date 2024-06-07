@@ -17,7 +17,7 @@ replace (
 	github.com/berachain/beacon-kit/mod/errors => ../mod/errors
 	github.com/berachain/beacon-kit/mod/execution => ../mod/execution
 	github.com/berachain/beacon-kit/mod/log => ../mod/log
-	github.com/berachain/beacon-kit/mod/node-builder => ../mod/node-builder
+	github.com/berachain/beacon-kit/mod/node-core => ../mod/node-core
 	github.com/berachain/beacon-kit/mod/p2p => ../mod/p2p
 	github.com/berachain/beacon-kit/mod/payload => ../mod/payload
 	github.com/berachain/beacon-kit/mod/primitives => ../mod/primitives
@@ -31,7 +31,7 @@ require (
 	cosmossdk.io/api v0.7.5
 	cosmossdk.io/core v0.12.1-0.20240530104414-90cbb022d5f6
 	cosmossdk.io/depinject v1.0.0-alpha.4.0.20240506202947-fbddf0a55044
-	github.com/berachain/beacon-kit/mod/node-builder v0.0.0-00010101000000-000000000000
+	github.com/berachain/beacon-kit/mod/node-core v0.0.0-00010101000000-000000000000
 	github.com/cosmos/cosmos-sdk v0.51.0
 	go.uber.org/automaxprocs v1.5.3
 )
@@ -115,7 +115,7 @@ require (
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
 	github.com/emicklei/dot v1.6.2 // indirect
 	github.com/ethereum/c-kzg-4844 v1.0.2 // indirect
-	github.com/ethereum/go-ethereum v1.14.4-0.20240530142416-2262bf34158e // indirect
+	github.com/ethereum/go-ethereum v1.14.5 // indirect
 	github.com/ethereum/go-verkle v0.1.1-0.20240306133620-7d920df305f0 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect

@@ -24,9 +24,9 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/berachain/beacon-kit/mod/node-builder/pkg/app"
-	"github.com/berachain/beacon-kit/mod/node-builder/pkg/config/spec"
-	nodebuilder "github.com/berachain/beacon-kit/mod/node-builder/pkg/node-builder"
+	nodebuilder "github.com/berachain/beacon-kit/mod/node-core/pkg/builder"
+	"github.com/berachain/beacon-kit/mod/node-core/pkg/config/spec"
+	"github.com/berachain/beacon-kit/mod/node-core/pkg/types"
 	"go.uber.org/automaxprocs/maxprocs"
 )
 
@@ -37,15 +37,22 @@ func run() error {
 		return err
 	}
 
-	// Build the node using the node-builder.
-	nb := nodebuilder.NewNodeBuilder[app.BeaconApp]().
-		WithAppName("beacond").
-		WithAppDescription("beacond is a beacon node for any beacon-kit chain").
-		WithDepInjectConfig(Config()).
+	// Build the node using the node-core.
+	nb := nodebuilder.New[types.NodeI](
+		nodebuilder.WithName[types.NodeI]("beacond"),
+		nodebuilder.WithDescription[types.NodeI](
+			"beacond is a beacon node for any beacon-kit chain",
+		),
+		nodebuilder.WithDepInjectConfig[types.NodeI](Config()),
 		// TODO: Don't hardcode the default chain spec.
-		WithChainSpec(spec.TestnetChainSpec())
+		nodebuilder.WithChainSpec[types.NodeI](spec.TestnetChainSpec()),
+	)
 
-	return nb.RunNode()
+	node, err := nb.Build()
+	if err != nil {
+		return err
+	}
+	return node.Run()
 }
 
 // main is the entry point.

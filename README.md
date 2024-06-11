@@ -1,10 +1,10 @@
 </br>
 
 <div align="center">
-  <a href="https://wagmi.sh">
+  <a href="https://github.com/berachain/beacon-kit">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://res.cloudinary.com/duv0g402y/image/upload/v1718034312/BeaconKitBanner.png">
-      <img alt="wagmi logo" src="https://res.cloudinary.com/duv0g402y/image/upload/v1713381289/monobera_color_alt2_ppo8o6.svg" width="auto" height="auto">
+      <img alt="beacon-kit-banner" src="https://res.cloudinary.com/duv0g402y/image/upload/v1718034312/BeaconKitBanner.png" width="auto" height="auto">
     </picture>
   </a>
 </div>
@@ -13,8 +13,6 @@
 </h2>
 
 _The project is still heavily under construction, see the [disclaimer below](#status)._
-
-
 <div>
 
 [![CI status](https://github.com/berachain/beacon-kit/workflows/pipeline/badge.svg)](https://github.com/berachain/beacon-kit/actions/workflows/pipeline.yml)
@@ -24,14 +22,10 @@ _The project is still heavily under construction, see the [disclaimer below](#st
 
 </div>
 
-
 ## What is BeaconKit?
 
 BeaconKit is a modular framework for building EVM based consensus clients.
 The framework offers the most user-friendly way to build and operate an EVM blockchain, while ensuring a functionally identical execution environment to that of the Ethereum Mainnet.
-
-
-
 
 ## Supported Execution Clients
 
@@ -77,7 +71,6 @@ preloaded with the native EVM token.
 ## Multinode Local Devnet
 
 Please refer to the [Kurtosis README](https://github.com/berachain/beacon-kit/blob/main/kurtosis/README.md) for more information on how to run a multinode local devnet.
-
 
 ## Status
 

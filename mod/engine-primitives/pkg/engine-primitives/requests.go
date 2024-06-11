@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BUSL-1.1
 //
 // Copyright (C) 2024, Berachain Foundation. All rights reserved.
-// Use of this software is govered by the Business Source License included
+// Use of this software is governed by the Business Source License included
 // in the LICENSE file of this repository and at www.mariadb.com/bsl11.
 //
 // ANY USE OF THE LICENSED WORK IN VIOLATION OF THIS LICENSE WILL AUTOMATICALLY
@@ -120,7 +120,7 @@ func BuildNewPayloadRequest[
 	}
 }
 
-// HasHValidVersionAndBlockHashes checks if the version and block hashes are
+// HasValidVersionedAndBlockHashes checks if the version and block hashes are
 // valid.
 // As per the Ethereum 2.0 specification:
 // https://github.com/ethereum/consensus-specs/blob/v1.4.0-beta.2/specs/deneb/beacon-chain.md#is_valid_block_hash
@@ -229,7 +229,6 @@ func (n *NewPayloadRequest[ExecutionPayloadT, WithdrawalT]) HasValidVersionedAnd
 	return nil
 }
 
-// ForkchoiceUpdateRequest.
 type ForkchoiceUpdateRequest struct {
 	// State is the forkchoice state.
 	State *ForkchoiceStateV1

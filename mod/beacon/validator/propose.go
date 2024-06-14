@@ -52,12 +52,15 @@ func (s *Service[
 		g, _      = errgroup.WithContext(ctx)
 	)
 	defer s.metrics.measureRequestBlockForProposalTime(startTime)
-	s.logger.Info("requesting beacon block assembly 🙈", "slot", requestedSlot)
+	s.logger.Info(
+		"requesting beacon block assembly 🙈",
+		"slot", requestedSlot.Base10(),
+	)
 
 	// The goal here is to acquire a payload whose parent is the previously
 	// finalized block, such that, if this payload is accepted, it will be
 	// the next finalized block in the chain. A byproduct of this design
-	// is that we get the nice property of lazily propogating the finalized
+	// is that we get the nice property of lazily propagating the finalized
 	// and safe block hashes to the execution client.
 	st := s.bsb.StateFromContext(ctx)
 
@@ -162,7 +165,7 @@ func (s *Service[
 
 	s.logger.Info(
 		"beacon block successfully built 🛠️ ",
-		"slot", requestedSlot,
+		"slot", requestedSlot.Base10(),
 		"state_root", blk.GetStateRoot(),
 		"duration", time.Since(startTime).String(),
 	)

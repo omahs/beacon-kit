@@ -27,6 +27,7 @@ import (
 	asynctypes "github.com/berachain/beacon-kit/mod/async/pkg/types"
 	"github.com/berachain/beacon-kit/mod/log"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/events"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 )
 
@@ -68,10 +69,6 @@ type Service[
 	ee ExecutionEngine[PayloadAttributesT]
 	// lb is a local builder for constructing new beacon states.
 	lb LocalBuilder[BeaconStateT]
-	// bp is the blob processor for processing incoming blobs.
-	bp BlobProcessor[
-		AvailabilityStoreT, BeaconBlockBodyT, BlobSidecarsT, ExecutionPayloadT,
-	]
 	// sp is the state processor for beacon blocks and states.
 	sp StateProcessor[
 		BeaconBlockT,
@@ -83,8 +80,8 @@ type Service[
 	]
 	// metrics is the metrics for the service.
 	metrics *chainMetrics
-	// blockFeed is the event feed for new blocks.
-	blockFeed EventFeed[*asynctypes.Event[BeaconBlockT]]
+	// blkBroker is the event feed for new blocks.
+	blkBroker EventFeed[*asynctypes.Event[BeaconBlockT]]
 	// optimisticPayloadBuilds is a flag used when the optimistic payload
 	// builder is enabled.
 	optimisticPayloadBuilds bool
@@ -125,9 +122,6 @@ func NewService[
 
 	ee ExecutionEngine[PayloadAttributesT],
 	lb LocalBuilder[BeaconStateT],
-	bp BlobProcessor[
-		AvailabilityStoreT, BeaconBlockBodyT, BlobSidecarsT, ExecutionPayloadT,
-	],
 	sp StateProcessor[
 		BeaconBlockT,
 		BeaconStateT,
@@ -137,7 +131,7 @@ func NewService[
 		ExecutionPayloadHeaderT,
 	],
 	ts TelemetrySink,
-	blockFeed EventFeed[*asynctypes.Event[BeaconBlockT]],
+	blkBroker EventFeed[*asynctypes.Event[BeaconBlockT]],
 	optimisticPayloadBuilds bool,
 ) *Service[
 	AvailabilityStoreT, BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
@@ -154,10 +148,9 @@ func NewService[
 		cs:                      cs,
 		ee:                      ee,
 		lb:                      lb,
-		bp:                      bp,
 		sp:                      sp,
 		metrics:                 newChainMetrics(ts),
-		blockFeed:               blockFeed,
+		blkBroker:               blkBroker,
 		optimisticPayloadBuilds: optimisticPayloadBuilds,
 		forceStartupSyncOnce:    new(sync.Once),
 	}
@@ -172,8 +165,52 @@ func (s *Service[
 
 func (s *Service[
 	_, _, _, _, _, _, _, _, _, _, _, _,
-]) Start(
-	context.Context,
-) error {
+]) Start(ctx context.Context) error {
+	subBlkCh, err := s.blkBroker.Subscribe()
+	if err != nil {
+		return err
+	}
+	go s.start(ctx, subBlkCh)
 	return nil
+}
+
+func (s *Service[
+	_, BeaconBlockT, _, _, _, _, _, _, _, _, _, _,
+]) start(
+	ctx context.Context,
+	subBlkCh chan *asynctypes.Event[BeaconBlockT],
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-subBlkCh:
+			if msg.Type() == events.BeaconBlockReceived {
+				s.handleBeaconBlockReceived(msg)
+			}
+		}
+	}
+}
+func (s *Service[
+	_, BeaconBlockT, _, _, _, _, _, _, _, _, _, _,
+]) handleBeaconBlockReceived(
+	msg *asynctypes.Event[BeaconBlockT],
+) {
+	// If the block is nil, exit early.
+	if msg.Error() != nil {
+		s.logger.Error("Error processing beacon block", "error", msg.Error())
+		return
+	}
+
+	// Publish the verified block event.
+	if err := s.blkBroker.Publish(
+		asynctypes.NewEvent(
+			msg.Context(),
+			events.BeaconBlockVerified,
+			msg.Data(),
+			s.VerifyIncomingBlock(msg.Context(), msg.Data()),
+		),
+	); err != nil {
+		s.logger.Error("Failed to publish verified block", "error", err)
+	}
 }

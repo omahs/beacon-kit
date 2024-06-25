@@ -22,28 +22,25 @@ package client
 
 import (
 	"context"
-	"encoding/json"
 	"math/big"
 	"net/http"
 	"strings"
 	"time"
 
+	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
 	"github.com/berachain/beacon-kit/mod/errors"
 	"github.com/berachain/beacon-kit/mod/execution/pkg/client/cache"
 	"github.com/berachain/beacon-kit/mod/execution/pkg/client/ethclient"
 	"github.com/berachain/beacon-kit/mod/log"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/constraints"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/net/jwt"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
 )
 
 // EngineClient is a struct that holds a pointer to an Eth1Client.
 type EngineClient[
-	ExecutionPayloadT interface {
-		Empty(uint32) ExecutionPayloadT
-		Version() uint32
-		json.Marshaler
-		json.Unmarshaler
-	},
+	ExecutionPayloadT constraints.EngineType[ExecutionPayloadT],
+	PayloadAttributesT engineprimitives.PayloadAttributer,
 ] struct {
 	// Eth1Client is a struct that holds the Ethereum 1 client and
 	// its configuration.
@@ -68,19 +65,19 @@ type EngineClient[
 // New creates a new engine client EngineClient.
 // It takes an Eth1Client as an argument and returns a pointer  to an
 // EngineClient.
-func New[ExecutionPayloadT interface {
-	Empty(uint32) ExecutionPayloadT
-	Version() uint32
-	json.Marshaler
-	json.Unmarshaler
-}](
+func New[
+	ExecutionPayloadT constraints.EngineType[ExecutionPayloadT],
+	PayloadAttributesT engineprimitives.PayloadAttributer,
+](
 	cfg *Config,
 	logger log.Logger[any],
 	jwtSecret *jwt.Secret,
 	telemetrySink TelemetrySink,
 	eth1ChainID *big.Int,
-) *EngineClient[ExecutionPayloadT] {
-	return &EngineClient[ExecutionPayloadT]{
+) *EngineClient[
+	ExecutionPayloadT, PayloadAttributesT,
+] {
+	return &EngineClient[ExecutionPayloadT, PayloadAttributesT]{
 		cfg:          cfg,
 		logger:       logger,
 		jwtSecret:    jwtSecret,
@@ -93,22 +90,16 @@ func New[ExecutionPayloadT interface {
 }
 
 // Name returns the name of the engine client.
-func (s *EngineClient[ExecutionPayloadT]) Name() string {
+func (s *EngineClient[
+	ExecutionPayloadT, PayloadAttributesT,
+]) Name() string {
 	return "engine-client"
 }
 
-// Status verifies the chain ID via JSON-RPC. By proxy
-// we will also verify the connection to the execution client.
-func (s *EngineClient[ExecutionPayloadT]) Status() error {
-	// If the client is not started, we return an error.
-	if s.Eth1Client.Client == nil {
-		return ErrNotStarted
-	}
-	return nil
-}
-
 // Start the engine client.
-func (s *EngineClient[ExecutionPayloadT]) Start(
+func (s *EngineClient[
+	ExecutionPayloadT, PayloadAttributesT,
+]) Start(
 	ctx context.Context,
 ) error {
 	if s.cfg.RPCDialURL.IsHTTP() || s.cfg.RPCDialURL.IsHTTPS() {
@@ -126,7 +117,7 @@ func (s *EngineClient[ExecutionPayloadT]) Start(
 	}
 
 	s.logger.Info(
-		"initializing connection to the execution client...",
+		"Initializing connection to the execution client...",
 		"dial_url", s.cfg.RPCDialURL.String(),
 	)
 
@@ -145,7 +136,7 @@ func (s *EngineClient[ExecutionPayloadT]) Start(
 			return ctx.Err()
 		case <-ticker.C:
 			s.logger.Info(
-				"waiting for execution client to start... 🍺🕔",
+				"Waiting for execution client to start... 🍺🕔",
 				"dial_url", s.cfg.RPCDialURL,
 			)
 			if err := s.initializeConnection(ctx); err != nil {
@@ -162,7 +153,9 @@ func (s *EngineClient[ExecutionPayloadT]) Start(
 
 // setupConnection dials the execution client and
 // ensures the chain ID is correct.
-func (s *EngineClient[ExecutionPayloadT]) initializeConnection(
+func (s *EngineClient[
+	ExecutionPayloadT, PayloadAttributesT,
+]) initializeConnection(
 	ctx context.Context,
 ) error {
 	var (
@@ -203,7 +196,7 @@ func (s *EngineClient[ExecutionPayloadT]) initializeConnection(
 
 	// Log the chain ID.
 	s.logger.Info(
-		"connected to execution client 🔌",
+		"Connected to execution client 🔌",
 		"dial_url",
 		s.cfg.RPCDialURL.String(),
 		"chain_id",
@@ -225,7 +218,9 @@ func (s *EngineClient[ExecutionPayloadT]) initializeConnection(
 /* -------------------------------------------------------------------------- */
 
 // dialExecutionRPCClient dials the execution client's RPC endpoint.
-func (s *EngineClient[ExecutionPayloadT]) dialExecutionRPCClient(
+func (s *EngineClient[
+	ExecutionPayloadT, PayloadAttributesT,
+]) dialExecutionRPCClient(
 	ctx context.Context,
 ) error {
 	var (

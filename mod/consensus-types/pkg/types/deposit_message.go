@@ -33,7 +33,7 @@ import (
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#depositmessage
 //
 //nolint:lll
-//go:generate go run github.com/ferranbt/fastssz/sszgen --path ./deposit_message.go -objs DepositMessage -include ./withdrawal_credentials.go,../../../primitives/pkg/math,../../../primitives/pkg/crypto,./fork_data.go,../../../primitives/pkg/bytes,$GETH_PKG_INCLUDE/common,$GETH_PKG_INCLUDE/common/hexutil -output deposit_message.ssz.go
+//go:generate go run github.com/ferranbt/fastssz/sszgen --path ./deposit_message.go -objs DepositMessage -include ./withdrawal_credentials.go,../../../primitives/pkg/common,../../../primitives/pkg/math,../../../primitives/pkg/crypto,./fork_data.go,../../../primitives/pkg/bytes,$GETH_PKG_INCLUDE/common,$GETH_PKG_INCLUDE/common/hexutil -output deposit_message.ssz.go
 type DepositMessage struct {
 	// Public key of the validator specified in the deposit.
 	Pubkey crypto.BLSPubkey `json:"pubkey"      ssz-max:"48"`
@@ -89,7 +89,7 @@ func (d *DepositMessage) New(
 	}
 }
 
-// VerifyDeposit verifies the deposit data when attempting to create a
+// VerifyCreateValidator verifies the deposit data when attempting to create a
 // new validator from a given deposit.
 func (d *DepositMessage) VerifyCreateValidator(
 	forkData *ForkData,

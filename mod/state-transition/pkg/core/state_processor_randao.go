@@ -21,21 +21,19 @@
 package core
 
 import (
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto/sha256"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/version"
 	"github.com/go-faster/xor"
-	sha256 "github.com/minio/sha256-simd"
 )
 
 // processRandaoReveal processes the randao reveal and
 // ensures it matches the local state.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	BeaconBlockT, _, _, BeaconStateT,
+	_, _, _, _, _, _, _, ForkDataT, _, _, _,
 ]) processRandaoReveal(
 	st BeaconStateT,
 	blk BeaconBlockT,
@@ -62,13 +60,13 @@ func (sp *StateProcessor[
 
 	var fd ForkDataT
 	fd = fd.New(
-		version.FromUint32[primitives.Version](
+		version.FromUint32[common.Version](
 			sp.cs.ActiveForkVersionForEpoch(epoch),
 		), genesisValidatorsRoot,
 	)
 
 	if !skipVerification {
-		var signingRoot primitives.Root
+		var signingRoot common.Root
 		signingRoot, err = fd.ComputeRandaoSigningRoot(
 			sp.cs.DomainTypeRandao(), epoch)
 		if err != nil {
@@ -107,10 +105,7 @@ func (sp *StateProcessor[
 //
 //nolint:lll
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, _, _, _, _, _, _, _, _, _,
 ]) processRandaoMixesReset(
 	st BeaconStateT,
 ) error {
@@ -134,21 +129,18 @@ func (sp *StateProcessor[
 
 // buildRandaoMix as defined in the Ethereum 2.0 specification.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
 ]) buildRandaoMix(
-	mix primitives.Bytes32,
+	mix common.Bytes32,
 	reveal crypto.BLSSignature,
-) (primitives.Bytes32, error) {
+) (common.Bytes32, error) {
 	newMix := make([]byte, constants.RootLength)
 	revealHash := sha256.Sum256(reveal[:])
 	// Apparently this library giga fast? Good project? lmeow.
 	if numXor := xor.Bytes(
 		newMix, mix[:], revealHash[:],
 	); numXor != constants.RootLength {
-		return primitives.Bytes32{}, ErrXorInvalid
+		return common.Bytes32{}, ErrXorInvalid
 	}
-	return primitives.Bytes32(newMix), nil
+	return common.Bytes32(newMix), nil
 }

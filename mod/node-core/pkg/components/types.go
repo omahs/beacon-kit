@@ -21,11 +21,16 @@
 package components
 
 import (
-	"github.com/berachain/beacon-kit/mod/async/pkg/event"
+	broker "github.com/berachain/beacon-kit/mod/async/pkg/broker"
+	asynctypes "github.com/berachain/beacon-kit/mod/async/pkg/types"
+	"github.com/berachain/beacon-kit/mod/beacon"
 	"github.com/berachain/beacon-kit/mod/beacon/blockchain"
 	"github.com/berachain/beacon-kit/mod/beacon/validator"
+	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/genesis"
+	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/state"
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
 	dablob "github.com/berachain/beacon-kit/mod/da/pkg/blob"
+	"github.com/berachain/beacon-kit/mod/da/pkg/da"
 	dastore "github.com/berachain/beacon-kit/mod/da/pkg/store"
 	datypes "github.com/berachain/beacon-kit/mod/da/pkg/types"
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
@@ -33,8 +38,10 @@ import (
 	"github.com/berachain/beacon-kit/mod/execution/pkg/deposit"
 	execution "github.com/berachain/beacon-kit/mod/execution/pkg/engine"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/components/signer"
+	"github.com/berachain/beacon-kit/mod/payload/pkg/attributes"
 	payloadbuilder "github.com/berachain/beacon-kit/mod/payload/pkg/builder"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/feed"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/service"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 	"github.com/berachain/beacon-kit/mod/runtime/pkg/middleware"
 	"github.com/berachain/beacon-kit/mod/state-transition/pkg/core"
@@ -48,10 +55,18 @@ type (
 	ABCIMiddleware = middleware.ABCIMiddleware[
 		*AvailabilityStore,
 		*BeaconBlock,
-		*BeaconBlockBody,
 		BeaconState,
 		*BlobSidecars,
-		StorageBackend,
+		*Deposit,
+		*ExecutionPayload,
+		*Genesis,
+	]
+
+	// AttributesFactory is a type alias for the attributes factory.
+	AttributesFactory = attributes.Factory[
+		BeaconState,
+		*engineprimitives.PayloadAttributes[*Withdrawal],
+		*Withdrawal,
 	]
 
 	// AvailabilityStore is a type alias for the availability store.
@@ -69,6 +84,12 @@ type (
 		*types.Validator, *Withdrawal,
 	]
 
+	// BeaconStateMarshallable is a type alias for the BeaconStateMarshallable.
+	BeaconStateMarshallable = state.BeaconStateMarshallable[
+		*BeaconBlockHeader, *types.Eth1Data, *ExecutionPayloadHeader,
+		*types.Fork, *types.Validator,
+	]
+
 	// BlobSidecars is a type alias for the blob sidecars.
 	BlobSidecars = datypes.BlobSidecars
 
@@ -78,28 +99,35 @@ type (
 		*BeaconBlockBody,
 	]
 
-	// BlockEvent is a type alias for the block event.
-	BlockEvent = feed.Event[*BeaconBlock]
-
-	// BlockFeed is a type alias for the block feed.
-	BlockFeed = event.FeedOf[feed.EventID, *BlockEvent]
-
 	// ChainService is a type alias for the chain service.
 	ChainService = blockchain.Service[
 		*AvailabilityStore,
 		*BeaconBlock,
 		*BeaconBlockBody,
+		*BeaconBlockHeader,
 		BeaconState,
 		*BlobSidecars,
 		*Deposit,
-		*DepositStore,
+		*ExecutionPayload,
+		*ExecutionPayloadHeader,
+		*Genesis,
+		*engineprimitives.PayloadAttributes[*Withdrawal],
+		*Withdrawal,
+	]
+
+	// DAService is a type alias for the DA service.
+	DAService = da.Service[
+		*dastore.Store[*BeaconBlockBody],
+		*BeaconBlockBody,
+		*BlobSidecars,
+		*broker.Broker[*SidecarEvent],
+		*ExecutionPayload,
 	]
 
 	// DBManager is a type alias for the database manager.
 	DBManager = manager.DBManager[
 		*BeaconBlock,
 		*BlockEvent,
-		event.Subscription,
 	]
 
 	// Deposit is a type alias for the deposit.
@@ -112,7 +140,6 @@ type (
 		*BlockEvent,
 		*Deposit,
 		*ExecutionPayload,
-		event.Subscription,
 		types.WithdrawalCredentials,
 	]
 
@@ -120,23 +147,26 @@ type (
 	DepositStore = depositdb.KVStore[*Deposit]
 
 	// EngineClient is a type alias for the engine client.
-	EngineClient = engineclient.EngineClient[*ExecutionPayload]
+	EngineClient = engineclient.EngineClient[
+		*ExecutionPayload, *engineprimitives.PayloadAttributes[*Withdrawal]]
 
 	// EngineClient is a type alias for the engine client.
-	ExecutionEngine = execution.Engine[*ExecutionPayload]
+	ExecutionEngine = execution.Engine[
+		*ExecutionPayload, *engineprimitives.PayloadAttributes[*Withdrawal],
+		engineprimitives.PayloadID, *Withdrawal,
+	]
 
 	// ExecutionPayload type aliases.
 	ExecutionPayload       = types.ExecutionPayload
 	ExecutionPayloadHeader = types.ExecutionPayloadHeader
 
-	FinalizeBlockMiddleware = middleware.FinalizeBlockMiddleware[
-		*BeaconBlock, BeaconState, *BlobSidecars,
-	]
+	// Genesis is a type alias for the genesis.
+	Genesis = genesis.Genesis[*Deposit, *ExecutionPayloadHeader]
 
 	// KVStore is a type alias for the KV store.
 	KVStore = beacondb.KVStore[
-		*types.Fork, *BeaconBlockHeader, *ExecutionPayloadHeader,
-		*types.Eth1Data, *types.Validator,
+		*BeaconBlockHeader, *types.Eth1Data, *ExecutionPayloadHeader,
+		*types.Fork, *types.Validator,
 	]
 
 	// LegacyKey type alias to LegacyKey used for LegacySinger construction.
@@ -144,36 +174,31 @@ type (
 
 	// LocalBuilder is a type alias for the local builder.
 	LocalBuilder = payloadbuilder.PayloadBuilder[
-		BeaconState, *ExecutionPayload, *ExecutionPayloadHeader,
+		BeaconState,
+		*ExecutionPayload,
+		*ExecutionPayloadHeader,
+		*engineprimitives.PayloadAttributes[*Withdrawal],
+		engineprimitives.PayloadID,
 	]
 
-	// StateProcessor is the type alias for the state processor inteface.
+	// StateProcessor is the type alias for the state processor interface.
 	StateProcessor = blockchain.StateProcessor[
 		*BeaconBlock,
 		BeaconState,
 		*BlobSidecars,
 		*transition.Context,
 		*Deposit,
+		*ExecutionPayloadHeader,
 	]
 
 	// StorageBackend is the type alias for the storage backend interface.
-	StorageBackend = blockchain.StorageBackend[
+	StorageBackend = beacon.StorageBackend[
 		*AvailabilityStore,
 		*BeaconBlockBody,
 		BeaconState,
 		*BlobSidecars,
 		*Deposit,
 		*DepositStore,
-	]
-
-	// ValidatorMiddleware is a type alias for the validator middleware.
-	ValidatorMiddleware = middleware.ValidatorMiddleware[
-		*AvailabilityStore,
-		*BeaconBlock,
-		*BeaconBlockBody,
-		BeaconState,
-		*BlobSidecars,
-		StorageBackend,
 	]
 
 	// ValidatorService is a type alias for the validator service.
@@ -182,10 +207,57 @@ type (
 		*BeaconBlockBody,
 		BeaconState,
 		*BlobSidecars,
+		*Deposit,
 		*DepositStore,
+		*types.Eth1Data,
+		*ExecutionPayload,
+		*ExecutionPayloadHeader,
 		*types.ForkData,
 	]
 
 	// Withdrawal is a type alias for the engineprimitives withdrawal.
 	Withdrawal = engineprimitives.Withdrawal
+)
+
+/* -------------------------------------------------------------------------- */
+/*                                   Events                                   */
+/* -------------------------------------------------------------------------- */
+
+type (
+	// BlockEvent is a type alias for the block event.
+	BlockEvent = asynctypes.Event[*BeaconBlock]
+
+	// SidecarEvent is a type alias for the sidecar event.
+	SidecarEvent = asynctypes.Event[*BlobSidecars]
+
+	// SlotEvent is a type alias for the slot event.
+	SlotEvent = asynctypes.Event[math.Slot]
+
+	// StatusEvent is a type alias for the status event.
+	StatusEvent = asynctypes.Event[*service.StatusEvent]
+
+	// ValidatorUpdateEvent is a type alias for the validator update event.
+	ValidatorUpdateEvent = asynctypes.Event[transition.ValidatorUpdates]
+)
+
+/* -------------------------------------------------------------------------- */
+/*                                   Brokers                                  */
+/* -------------------------------------------------------------------------- */
+
+type (
+
+	// SidecarsBroker is a type alias for the blob feed.
+	SidecarsBroker = broker.Broker[*SidecarEvent]
+
+	// BlockBroker is a type alias for the block feed.
+	BlockBroker = broker.Broker[*BlockEvent]
+
+	// SlotBroker is a type alias for the slot feed.
+	SlotBroker = broker.Broker[*SlotEvent]
+
+	// StatusBroker is a type alias for the status feed.
+	StatusBroker = broker.Broker[*StatusEvent]
+
+	// ValidatorUpdateBroker is a type alias for the validator update feed.
+	ValidatorUpdateBroker = broker.Broker[*ValidatorUpdateEvent]
 )

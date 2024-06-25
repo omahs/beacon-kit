@@ -22,69 +22,46 @@ package components
 
 import (
 	"cosmossdk.io/depinject"
+	"github.com/berachain/beacon-kit/mod/log"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/components/metrics"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/runtime/pkg/middleware"
 )
 
-// ValidatorMiddlewareInput is the input for the validator middleware provider.
-type ValidatorMiddlewareInput struct {
+// ABCIMiddlewareInput is the input for the validator middleware provider.
+type ABCIMiddlewareInput struct {
 	depinject.In
-	ChainService     *ChainService
-	ChainSpec        primitives.ChainSpec
-	StorageBackend   StorageBackend
-	TelemetrySink    *metrics.TelemetrySink
-	ValidatorService *ValidatorService
+	BeaconBlockFeed       *BlockBroker
+	ChainService          *ChainService
+	ChainSpec             common.ChainSpec
+	Logger                log.Logger[any]
+	SidecarsFeed          *SidecarsBroker
+	SlotBroker            *SlotBroker
+	TelemetrySink         *metrics.TelemetrySink
+	ValidatorUpdateBroker *ValidatorUpdateBroker
 }
 
-// ProvideValidatorMiddleware is a depinject provider for the validator
+// ProvideABCIMiddleware is a depinject provider for the validator
 // middleware.
-func ProvideValidatorMiddleware(
-	in ValidatorMiddlewareInput,
-) *ValidatorMiddleware {
+func ProvideABCIMiddleware(
+	in ABCIMiddlewareInput,
+) (*ABCIMiddleware, error) {
+	validatorUpdatesSub, err := in.ValidatorUpdateBroker.Subscribe()
+	if err != nil {
+		return nil, err
+	}
 	return middleware.
-		NewValidatorMiddleware[*AvailabilityStore](
-		in.ChainSpec,
-		in.ValidatorService,
-		in.ChainService,
-		in.TelemetrySink,
-		in.StorageBackend,
-	)
-}
-
-// FinalizeBlockMiddlewareInput is the input for the finalize block middleware.
-type FinalizeBlockMiddlewareInput struct {
-	depinject.In
-	ChainService  *ChainService
-	ChainSpec     primitives.ChainSpec
-	TelemetrySink *metrics.TelemetrySink
-}
-
-// ProvideFinalizeBlockMiddleware is a depinject provider for the finalize block
-// middleware.
-func ProvideFinalizeBlockMiddleware(
-	in FinalizeBlockMiddlewareInput,
-) *FinalizeBlockMiddleware {
-	return middleware.NewFinalizeBlockMiddleware[
-		*BeaconBlock, BeaconState, *BlobSidecars,
+		NewABCIMiddleware[
+		*AvailabilityStore, *BeaconBlock, BeaconState,
+		*BlobSidecars, *Deposit, *ExecutionPayload, *Genesis,
 	](
 		in.ChainSpec,
 		in.ChainService,
+		in.Logger,
 		in.TelemetrySink,
-	)
-}
-
-// ABCIMiddlewareInput is the input for the ABCI middleware provider.
-type ABCIMiddlewareInput struct {
-	depinject.In
-	FinalizeBlock *FinalizeBlockMiddleware
-	Validator     *ValidatorMiddleware
-}
-
-// ProvideABCIMiddleware is a depinject provider for the ABCI middleware.
-func ProvideABCIMiddleware(in ABCIMiddlewareInput) *ABCIMiddleware {
-	return &ABCIMiddleware{
-		FinalizeBlock: in.FinalizeBlock,
-		Validator:     in.Validator,
-	}
+		in.BeaconBlockFeed,
+		in.SidecarsFeed,
+		in.SlotBroker,
+		validatorUpdatesSub,
+	), nil
 }

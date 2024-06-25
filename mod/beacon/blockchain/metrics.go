@@ -52,14 +52,6 @@ func (cm *chainMetrics) measureStateTransitionDuration(
 	)
 }
 
-// measureBlobProcessingDuration measures the time to process
-// the blobs for a block.
-func (cm *chainMetrics) measureBlobProcessingDuration(start time.Time) {
-	cm.sink.MeasureSince(
-		"beacon_kit.beacon.blockchain.blob_processing_duration", start,
-	)
-}
-
 // markRebuildPayloadForRejectedBlockSuccess increments the counter for the
 // number of times
 // the validator successfully rebuilt the payload for a rejected block.
@@ -89,7 +81,7 @@ func (cm *chainMetrics) markRebuildPayloadForRejectedBlockFailure(
 	)
 }
 
-// measureOptimisticPayloadBuildSuccess increments the counter for the number of
+// markOptimisticPayloadBuildSuccess increments the counter for the number of
 // times
 // the validator successfully built an optimistic payload.
 func (cm *chainMetrics) markOptimisticPayloadBuildSuccess(slot math.Slot) {
@@ -100,7 +92,7 @@ func (cm *chainMetrics) markOptimisticPayloadBuildSuccess(slot math.Slot) {
 	)
 }
 
-// measureOptimisticPayloadBuildFailure increments the counter for the number of
+// markOptimisticPayloadBuildFailure increments the counter for the number of
 // times
 // the validator failed to build an optimistic payload.
 func (cm *chainMetrics) markOptimisticPayloadBuildFailure(

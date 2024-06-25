@@ -23,10 +23,8 @@ package state
 import (
 	"reflect"
 
-	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/state"
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
 	"github.com/berachain/beacon-kit/mod/errors"
-	"github.com/berachain/beacon-kit/mod/primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 )
@@ -36,6 +34,14 @@ import (
 //nolint:revive // todo fix somehow
 type StateDB[
 	BeaconStateT any,
+	BeaconStateMarshallableT BeaconStateMarshallable[
+		BeaconStateMarshallableT,
+		BeaconBlockHeaderT,
+		Eth1DataT,
+		ExecutionPayloadHeaderT,
+		ForkT,
+		ValidatorT,
+	],
 	KVStoreT KVStore[
 		KVStoreT,
 		ForkT,
@@ -59,12 +65,20 @@ type StateDB[
 		ExecutionPayloadHeaderT,
 		ValidatorT,
 	]
-	cs primitives.ChainSpec
+	cs common.ChainSpec
 }
 
 // NewBeaconStateFromDB creates a new beacon state from an underlying state db.
 func NewBeaconStateFromDB[
 	BeaconStateT any,
+	BeaconStateMarshallableT BeaconStateMarshallable[
+		BeaconStateMarshallableT,
+		BeaconBlockHeaderT,
+		Eth1DataT,
+		ExecutionPayloadHeaderT,
+		ForkT,
+		ValidatorT,
+	],
 	KVStoreT KVStore[
 		KVStoreT,
 		ForkT,
@@ -88,10 +102,11 @@ func NewBeaconStateFromDB[
 		ExecutionPayloadHeaderT,
 		ValidatorT,
 	],
-	cs primitives.ChainSpec,
+	cs common.ChainSpec,
 ) BeaconStateT {
 	result := &StateDB[
 		BeaconStateT,
+		BeaconStateMarshallableT,
 		KVStoreT,
 		ForkT,
 		BeaconBlockHeaderT,
@@ -110,11 +125,11 @@ func NewBeaconStateFromDB[
 
 // Copy returns a copy of the beacon state.
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) Copy() BeaconStateT {
-	return NewBeaconStateFromDB[BeaconStateT](
+	return NewBeaconStateFromDB[BeaconStateT, BeaconStateMarshallableT](
 		s.KVStore.Copy(),
 		s.cs,
 	)
@@ -122,7 +137,7 @@ func (s *StateDB[
 
 // IncreaseBalance increases the balance of a validator.
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) IncreaseBalance(
@@ -138,7 +153,7 @@ func (s *StateDB[
 
 // DecreaseBalance decreases the balance of a validator.
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) DecreaseBalance(
@@ -154,7 +169,7 @@ func (s *StateDB[
 
 // UpdateSlashingAtIndex sets the slashing amount in the store.
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) UpdateSlashingAtIndex(
@@ -189,7 +204,7 @@ func (s *StateDB[
 //
 //nolint:lll
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) ExpectedWithdrawals() ([]*engineprimitives.Withdrawal, error) {
@@ -222,7 +237,7 @@ func (s *StateDB[
 		return nil, err
 	}
 
-	// Iterate through indicies to find the next validators to withdraw.
+	// Iterate through indices to find the next validators to withdraw.
 	for range min(
 		s.cs.MaxValidatorsPerWithdrawalsSweep(), totalValidators,
 	) {
@@ -282,7 +297,7 @@ func (s *StateDB[
 //
 //nolint:funlen,gocognit // todo fix somehow
 func (s *StateDB[
-	BeaconStateT, KVStoreT, ForkT,
+	BeaconStateT, BeaconStateMarshallableT, KVStoreT, ForkT,
 	BeaconBlockHeaderT, Eth1DataT, ExecutionPayloadHeaderT,
 	ValidatorT, WithdrawalCredentialsT,
 ]) HashTreeRoot() ([32]byte, error) {
@@ -306,7 +321,7 @@ func (s *StateDB[
 		return [32]byte{}, err
 	}
 
-	blockRoots := make([]primitives.Root, s.cs.SlotsPerHistoricalRoot())
+	blockRoots := make([]common.Root, s.cs.SlotsPerHistoricalRoot())
 	for i := range s.cs.SlotsPerHistoricalRoot() {
 		blockRoots[i], err = s.GetBlockRootAtIndex(i)
 		if err != nil {
@@ -314,7 +329,7 @@ func (s *StateDB[
 		}
 	}
 
-	stateRoots := make([]primitives.Root, s.cs.SlotsPerHistoricalRoot())
+	stateRoots := make([]common.Root, s.cs.SlotsPerHistoricalRoot())
 	for i := range s.cs.SlotsPerHistoricalRoot() {
 		stateRoots[i], err = s.StateRootAtIndex(i)
 		if err != nil {
@@ -347,7 +362,7 @@ func (s *StateDB[
 		return [32]byte{}, err
 	}
 
-	randaoMixes := make([]primitives.Bytes32, s.cs.EpochsPerHistoricalVector())
+	randaoMixes := make([]common.Bytes32, s.cs.EpochsPerHistoricalVector())
 	for i := range s.cs.EpochsPerHistoricalVector() {
 		randaoMixes[i], err = s.GetRandaoMixAtIndex(i)
 		if err != nil {
@@ -376,13 +391,7 @@ func (s *StateDB[
 	}
 
 	// TODO: Properly move BeaconState into full generics.
-	st, err := new(state.BeaconState[
-		BeaconBlockHeaderT,
-		ExecutionPayloadHeaderT,
-		Eth1DataT,
-		ForkT,
-		ValidatorT,
-	]).New(
+	st, err := (*new(BeaconStateMarshallableT)).New(
 		s.cs.ActiveForkVersionForSlot(slot),
 		genesisValidatorsRoot,
 		slot,

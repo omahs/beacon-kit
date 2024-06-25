@@ -24,24 +24,33 @@ import (
 	"context"
 	"sync"
 
-	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
+	asynctypes "github.com/berachain/beacon-kit/mod/async/pkg/types"
 	"github.com/berachain/beacon-kit/mod/log"
-	"github.com/berachain/beacon-kit/mod/primitives"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/feed"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/events"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 )
 
 // Service is the blockchain service.
 type Service[
-	AvailabilityStoreT AvailabilityStore[
-		BeaconBlockBodyT, BlobSidecarsT,
+	AvailabilityStoreT AvailabilityStore[BeaconBlockBodyT, BlobSidecarsT],
+	BeaconBlockT BeaconBlock[BeaconBlockBodyT, ExecutionPayloadT],
+	BeaconBlockBodyT BeaconBlockBody[ExecutionPayloadT],
+	BeaconBlockHeaderT BeaconBlockHeader,
+	BeaconStateT ReadOnlyBeaconState[
+		BeaconStateT, BeaconBlockHeaderT, ExecutionPayloadHeaderT,
 	],
-	BeaconBlockT types.RawBeaconBlock[BeaconBlockBodyT],
-	BeaconBlockBodyT types.RawBeaconBlockBody,
-	BeaconStateT ReadOnlyBeaconState[BeaconStateT],
 	BlobSidecarsT BlobSidecars,
 	DepositT any,
-	DepositStoreT DepositStore[DepositT],
+	ExecutionPayloadT ExecutionPayload,
+	ExecutionPayloadHeaderT ExecutionPayloadHeader,
+	GenesisT Genesis[DepositT, ExecutionPayloadHeaderT],
+	PayloadAttributesT interface {
+		IsNil() bool
+		Version() uint32
+		GetSuggestedFeeRecipient() common.ExecutionAddress
+	},
+	WithdrawalT any,
 ] struct {
 	// sb represents the backend storage for beacon states and associated
 	// sidecars.
@@ -50,19 +59,16 @@ type Service[
 		BeaconBlockBodyT,
 		BeaconStateT,
 		BlobSidecarsT,
-		DepositT,
-		DepositStoreT,
 	]
 	// logger is used for logging messages in the service.
 	logger log.Logger[any]
 	// cs holds the chain specifications.
-	cs primitives.ChainSpec
+	cs common.ChainSpec
 	// ee is the execution engine responsible for processing execution payloads.
-	ee ExecutionEngine
+
+	ee ExecutionEngine[PayloadAttributesT]
 	// lb is a local builder for constructing new beacon states.
 	lb LocalBuilder[BeaconStateT]
-	// bp is the blob processor for processing incoming blobs.
-	bp BlobProcessor[AvailabilityStoreT, BeaconBlockBodyT, BlobSidecarsT]
 	// sp is the state processor for beacon blocks and states.
 	sp StateProcessor[
 		BeaconBlockT,
@@ -70,11 +76,14 @@ type Service[
 		BlobSidecarsT,
 		*transition.Context,
 		DepositT,
+		ExecutionPayloadHeaderT,
 	]
 	// metrics is the metrics for the service.
 	metrics *chainMetrics
-	// blockFeed is the event feed for new blocks.
-	blockFeed EventFeed[*feed.Event[BeaconBlockT]]
+	// blkBroker is the event feed for new blocks.
+	blkBroker EventFeed[*asynctypes.Event[BeaconBlockT]]
+	// validatorUpdateBroker is the event feed for validator updates.
+	validatorUpdateBroker EventFeed[*asynctypes.Event[transition.ValidatorUpdates]]
 	// optimisticPayloadBuilds is a flag used when the optimistic payload
 	// builder is enabled.
 	optimisticPayloadBuilds bool
@@ -84,57 +93,68 @@ type Service[
 
 // NewService creates a new validator service.
 func NewService[
-	AvailabilityStoreT AvailabilityStore[
-		BeaconBlockBodyT, BlobSidecarsT,
+	AvailabilityStoreT AvailabilityStore[BeaconBlockBodyT, BlobSidecarsT],
+	BeaconBlockT BeaconBlock[BeaconBlockBodyT, ExecutionPayloadT],
+	BeaconBlockBodyT BeaconBlockBody[ExecutionPayloadT],
+	BeaconBlockHeaderT BeaconBlockHeader,
+	BeaconStateT ReadOnlyBeaconState[
+		BeaconStateT, BeaconBlockHeaderT,
+		ExecutionPayloadHeaderT,
 	],
-	BeaconBlockT types.RawBeaconBlock[BeaconBlockBodyT],
-	BeaconBlockBodyT types.RawBeaconBlockBody,
-	BeaconStateT ReadOnlyBeaconState[BeaconStateT],
 	BlobSidecarsT BlobSidecars,
-	DepositStoreT DepositStore[DepositT],
 	DepositT any,
+	ExecutionPayloadT ExecutionPayload,
+	ExecutionPayloadHeaderT ExecutionPayloadHeader,
+	GenesisT Genesis[DepositT, ExecutionPayloadHeaderT],
+	PayloadAttributesT interface {
+		IsNil() bool
+		Version() uint32
+		GetSuggestedFeeRecipient() common.ExecutionAddress
+	},
+	WithdrawalT any,
 ](
 	sb StorageBackend[
 		AvailabilityStoreT,
 		BeaconBlockBodyT,
 		BeaconStateT,
 		BlobSidecarsT,
-		DepositT,
-		DepositStoreT,
 	],
 	logger log.Logger[any],
-	cs primitives.ChainSpec,
-	ee ExecutionEngine,
+	cs common.ChainSpec,
+	ee ExecutionEngine[PayloadAttributesT],
 	lb LocalBuilder[BeaconStateT],
-	bp BlobProcessor[
-		AvailabilityStoreT,
-		BeaconBlockBodyT,
-		BlobSidecarsT,
-	],
 	sp StateProcessor[
-		BeaconBlockT, BeaconStateT,
-		BlobSidecarsT, *transition.Context, DepositT,
+		BeaconBlockT,
+		BeaconStateT,
+		BlobSidecarsT,
+		*transition.Context,
+		DepositT,
+		ExecutionPayloadHeaderT,
 	],
 	ts TelemetrySink,
-	blockFeed EventFeed[*feed.Event[BeaconBlockT]],
+	blkBroker EventFeed[*asynctypes.Event[BeaconBlockT]],
+	//nolint:lll // annoying formatter.
+	validatorUpdateBroker EventFeed[*asynctypes.Event[transition.ValidatorUpdates]],
 	optimisticPayloadBuilds bool,
 ) *Service[
-	AvailabilityStoreT, BeaconBlockT, BeaconBlockBodyT, BeaconStateT,
-	BlobSidecarsT, DepositT, DepositStoreT,
+	AvailabilityStoreT, BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
+	BeaconStateT, BlobSidecarsT, DepositT, ExecutionPayloadT,
+	ExecutionPayloadHeaderT, GenesisT, PayloadAttributesT, WithdrawalT,
 ] {
 	return &Service[
-		AvailabilityStoreT, BeaconBlockT, BeaconBlockBodyT, BeaconStateT,
-		BlobSidecarsT, DepositT, DepositStoreT,
+		AvailabilityStoreT, BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
+		BeaconStateT, BlobSidecarsT, DepositT, ExecutionPayloadT,
+		ExecutionPayloadHeaderT, GenesisT, PayloadAttributesT, WithdrawalT,
 	]{
 		sb:                      sb,
 		logger:                  logger,
 		cs:                      cs,
 		ee:                      ee,
 		lb:                      lb,
-		bp:                      bp,
 		sp:                      sp,
 		metrics:                 newChainMetrics(ts),
-		blockFeed:               blockFeed,
+		blkBroker:               blkBroker,
+		validatorUpdateBroker:   validatorUpdateBroker,
 		optimisticPayloadBuilds: optimisticPayloadBuilds,
 		forceStartupSyncOnce:    new(sync.Once),
 	}
@@ -142,39 +162,97 @@ func NewService[
 
 // Name returns the name of the service.
 func (s *Service[
-	AvailabilityStoreT,
-	BeaconBlockT,
-	BeaconBlockBodyT,
-	BeaconStateT,
-	BlobSidecarsT,
-	DepositStoreT,
-	DepositT,
+	_, _, _, _, _, _, _, _, _, _, _, _,
 ]) Name() string {
 	return "blockchain"
 }
 
 func (s *Service[
-	AvailabilityStoreT,
-	BeaconBlockT,
-	BeaconBlockBodyT,
-	BeaconStateT,
-	BlobSidecarsT,
-	DepositStoreT,
-	DepositT,
-]) Start(
-	context.Context,
-) error {
+	_, _, _, _, _, _, _, _, _, _, _, _,
+]) Start(ctx context.Context) error {
+	subBlkCh, err := s.blkBroker.Subscribe()
+	if err != nil {
+		return err
+	}
+	go s.start(ctx, subBlkCh)
 	return nil
 }
 
 func (s *Service[
-	AvailabilityStoreT,
-	BeaconBlockT,
-	BeaconBlockBodyT,
-	BeaconStateT,
-	BlobSidecarsT,
-	DepositStoreT,
-	DepositT,
-]) Status() error {
-	return nil
+	_, BeaconBlockT, _, _, _, _, _, _, _, _, _, _,
+]) start(
+	ctx context.Context,
+	subBlkCh chan *asynctypes.Event[BeaconBlockT],
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case msg := <-subBlkCh:
+			switch msg.Type() {
+			case events.BeaconBlockReceived:
+				s.handleBeaconBlockReceived(msg)
+			case events.BeaconBlockFinalizedRequest:
+				s.handleBeaconBlockFinalization(msg)
+			}
+		}
+	}
+}
+func (s *Service[
+	_, BeaconBlockT, _, _, _, _, _, _, _, _, _, _,
+]) handleBeaconBlockReceived(
+	msg *asynctypes.Event[BeaconBlockT],
+) {
+	// If the block is nil, exit early.
+	if msg.Error() != nil {
+		s.logger.Error("Error processing beacon block", "error", msg.Error())
+		return
+	}
+
+	// Publish the verified block event.
+	if err := s.blkBroker.Publish(
+		msg.Context(),
+		asynctypes.NewEvent(
+			msg.Context(),
+			events.BeaconBlockVerified,
+			msg.Data(),
+			s.VerifyIncomingBlock(msg.Context(), msg.Data()),
+		),
+	); err != nil {
+		s.logger.Error("Failed to publish verified block", "error", err)
+	}
+}
+
+func (s *Service[
+	_, BeaconBlockT, _, _, _, _, _, _, _, _, _, _,
+]) handleBeaconBlockFinalization(
+	msg *asynctypes.Event[BeaconBlockT],
+) {
+	// If there's an error in the event, log it and return
+	if msg.Error() != nil {
+		s.logger.Error("Error verifying beacon block", "error", msg.Error())
+		return
+	}
+
+	// Process the verified block
+	valUpdates, err := s.ProcessBeaconBlock(msg.Context(), msg.Data())
+	if err != nil {
+		s.logger.Error("Failed to process verified beacon block", "error", err)
+	}
+
+	// Publish the validator set updated event
+	if err = s.validatorUpdateBroker.Publish(
+		msg.Context(),
+		asynctypes.NewEvent(
+			msg.Context(),
+			events.ValidatorSetUpdated,
+			valUpdates,
+			err,
+		)); err != nil {
+		s.logger.Error(
+			"Failed to publish validator set updated event",
+			"error",
+			err,
+		)
+	}
 }

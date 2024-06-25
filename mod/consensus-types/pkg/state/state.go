@@ -26,16 +26,16 @@ import (
 
 	deneb "github.com/berachain/beacon-kit/mod/consensus-types/pkg/state/deneb"
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/version"
 )
 
 // BeaconState is the interface for the beacon state.
-type BeaconState[
+type BeaconStateMarshallable[
 	BeaconBlockHeaderT,
-	ExecutionPayloadHeaderT,
 	Eth1DataT,
+	ExecutionPayloadHeaderT,
 	ForkT,
 	ValidatorT any,
 ] struct {
@@ -44,43 +44,43 @@ type BeaconState[
 }
 
 // New creates a new BeaconState.
-func (st *BeaconState[
+func (st *BeaconStateMarshallable[
 	BeaconBlockHeaderT,
-	ExecutionPayloadHeaderT,
 	Eth1DataT,
+	ExecutionPayloadHeaderT,
 	ForkT,
 	ValidatorT,
 ]) New(
 	forkVersion uint32,
-	genesisValidatorsRoot primitives.Root,
+	genesisValidatorsRoot common.Root,
 	slot math.Slot,
 	fork ForkT,
 	latestBlockHeader BeaconBlockHeaderT,
-	blockRoots []primitives.Root,
-	stateRoots []primitives.Root,
+	blockRoots []common.Root,
+	stateRoots []common.Root,
 	eth1Data Eth1DataT,
 	eth1DepositIndex uint64,
 	latestExecutionPayloadHeader ExecutionPayloadHeaderT,
 	validators []ValidatorT,
 	balances []uint64,
-	randaoMixes []primitives.Bytes32,
+	randaoMixes []common.Bytes32,
 	nextWithdrawalIndex uint64,
 	nextWithdrawalValidatorIndex math.ValidatorIndex,
 	slashings []uint64,
 	totalSlashing math.Gwei,
-) (*BeaconState[
+) (*BeaconStateMarshallable[
 	BeaconBlockHeaderT,
-	ExecutionPayloadHeaderT,
 	Eth1DataT,
+	ExecutionPayloadHeaderT,
 	ForkT,
 	ValidatorT,
 ], error) {
 	switch forkVersion {
 	case version.Deneb:
-		return &BeaconState[
+		return &BeaconStateMarshallable[
 			BeaconBlockHeaderT,
-			ExecutionPayloadHeaderT,
 			Eth1DataT,
+			ExecutionPayloadHeaderT,
 			ForkT,
 			ValidatorT,
 		]{

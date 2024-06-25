@@ -31,7 +31,7 @@ import (
 
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/state/deneb"
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/stretchr/testify/require"
 )
@@ -40,11 +40,11 @@ import (
 func generateValidBeaconState() *deneb.BeaconState {
 	var byteArray [256]byte
 	return &deneb.BeaconState{
-		BlockRoots:  []primitives.Root{},
-		StateRoots:  []primitives.Root{},
+		BlockRoots:  []common.Root{},
+		StateRoots:  []common.Root{},
 		Validators:  []*types.Validator{},
 		Balances:    []uint64{},
-		RandaoMixes: []primitives.Bytes32{},
+		RandaoMixes: []common.Bytes32{},
 		Slashings:   []uint64{},
 		LatestExecutionPayloadHeader: &types.ExecutionPayloadHeaderDeneb{
 			LogsBloom: byteArray[:],
@@ -101,4 +101,39 @@ func TestBeaconState_MarshalSSZTo(t *testing.T) {
 
 	// The two byte slices should be equal
 	require.Equal(t, data, buf)
+}
+
+func TestBeaconState_MarshalSSZFields(t *testing.T) {
+	state := generateValidBeaconState()
+
+	// Test BlockRoots field
+	state.BlockRoots = make([]common.Root, 8193) // Exceeding the limit
+	_, err := state.MarshalSSZ()
+	require.Error(t, err)
+	state.BlockRoots = make([]common.Root, 8192) // Within the limit
+	_, err = state.MarshalSSZ()
+	require.NoError(t, err)
+
+	// Test StateRoots field
+	state.StateRoots = make([]common.Root, 8193) // Exceeding the limit
+	_, err = state.MarshalSSZ()
+	require.Error(t, err)
+	state.StateRoots = make([]common.Root, 8192) // Within the limit
+	_, err = state.MarshalSSZ()
+	require.NoError(t, err)
+
+	// Test LatestExecutionPayloadHeader field
+	state.LatestExecutionPayloadHeader = &types.ExecutionPayloadHeaderDeneb{
+		LogsBloom: make([]byte, 256), // Initialize LogsBloom with 256 bytes
+	}
+	_, err = state.MarshalSSZ()
+	require.NoError(t, err)
+
+	// Test RandaoMixes field
+	state.RandaoMixes = make([]common.Bytes32, 65537) // Exceeding the limit
+	_, err = state.MarshalSSZ()
+	require.Error(t, err)
+	state.RandaoMixes = make([]common.Bytes32, 65536) // Within the limit
+	_, err = state.MarshalSSZ()
+	require.NoError(t, err)
 }

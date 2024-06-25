@@ -24,28 +24,29 @@ import (
 	"cosmossdk.io/core/log"
 	"cosmossdk.io/depinject"
 	"github.com/berachain/beacon-kit/mod/beacon/blockchain"
+	"github.com/berachain/beacon-kit/mod/config"
+	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/components/metrics"
-	"github.com/berachain/beacon-kit/mod/node-core/pkg/config"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
 )
 
 // ChainServiceInput is the input for the chain service provider.
 type ChainServiceInput struct {
 	depinject.In
-	BlobProcessor   *BlobProcessor
-	BlockFeed       *BlockFeed
-	ChainSpec       primitives.ChainSpec
-	Cfg             *config.Config
-	DepositService  *DepositService
-	EngineClient    *EngineClient
-	ExecutionEngine *ExecutionEngine
-	LocalBuilder    *LocalBuilder
-	Logger          log.Logger
-	Signer          crypto.BLSSigner
-	StateProcessor  StateProcessor
-	StorageBackend  StorageBackend
-	TelemetrySink   *metrics.TelemetrySink
+	BlockBroker           *BlockBroker
+	ChainSpec             common.ChainSpec
+	Cfg                   *config.Config
+	DepositService        *DepositService
+	EngineClient          *EngineClient
+	ExecutionEngine       *ExecutionEngine
+	LocalBuilder          *LocalBuilder
+	Logger                log.Logger
+	Signer                crypto.BLSSigner
+	StateProcessor        StateProcessor
+	StorageBackend        StorageBackend
+	TelemetrySink         *metrics.TelemetrySink
+	ValidatorUpdateBroker *ValidatorUpdateBroker
 }
 
 // ProvideChainService is a depinject provider for the blockchain service.
@@ -56,19 +57,25 @@ func ProvideChainService(
 		*AvailabilityStore,
 		*BeaconBlock,
 		*BeaconBlockBody,
+		*BeaconBlockHeader,
 		BeaconState,
 		*BlobSidecars,
-		*DepositStore,
+		*Deposit,
+		*ExecutionPayload,
+		*ExecutionPayloadHeader,
+		*Genesis,
+		*engineprimitives.PayloadAttributes[*Withdrawal],
+		*Withdrawal,
 	](
 		in.StorageBackend,
 		in.Logger.With("service", "blockchain"),
 		in.ChainSpec,
 		in.ExecutionEngine,
 		in.LocalBuilder,
-		in.BlobProcessor,
 		in.StateProcessor,
 		in.TelemetrySink,
-		in.BlockFeed,
+		in.BlockBroker,
+		in.ValidatorUpdateBroker,
 		// If optimistic is enabled, we want to skip post finalization FCUs.
 		in.Cfg.Validator.EnableOptimisticPayloadBuilds,
 	)

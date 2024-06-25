@@ -22,11 +22,11 @@ package genesis
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
-	"github.com/berachain/beacon-kit/mod/primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
@@ -36,12 +36,16 @@ import (
 
 // Genesis is a struct that contains the genesis information
 // need to start the beacon chain.
+//
+//nolint:lll
 type Genesis[
 	DepositT any,
-	ExecutonPayloadHeaderT any,
+	ExecutionPayloadHeaderT interface {
+		NewFromJSON([]byte, uint32) (ExecutionPayloadHeaderT, error)
+	},
 ] struct {
 	// ForkVersion is the fork version of the genesis slot.
-	ForkVersion primitives.Version `json:"fork_version"`
+	ForkVersion common.Version `json:"fork_version"`
 
 	// Deposits represents the deposits in the genesis. Deposits are
 	// used to initialize the validator set.
@@ -49,12 +53,63 @@ type Genesis[
 
 	// ExecutionPayloadHeader is the header of the execution payload
 	// in the genesis.
-	ExecutionPayloadHeader ExecutonPayloadHeaderT `json:"execution_payload_header"`
+	ExecutionPayloadHeader ExecutionPayloadHeaderT `json:"execution_payload_header"`
 }
 
-// DefaultGenesis returns a the default genesis.
+// GetForkVersion returns the fork version in the genesis.
+func (g *Genesis[
+	DepositT, ExecutionPayloadHeaderT,
+]) GetForkVersion() common.Version {
+	return g.ForkVersion
+}
+
+// GetDeposits returns the deposits in the genesis.
+func (g *Genesis[DepositT, ExecutionPayloadHeaderT]) GetDeposits() []DepositT {
+	return g.Deposits
+}
+
+// GetExecutionPayloadHeader returns the execution payload header.
+func (g *Genesis[
+	DepositT, ExecutionPayloadHeaderT,
+]) GetExecutionPayloadHeader() ExecutionPayloadHeaderT {
+	return g.ExecutionPayloadHeader
+}
+
+// UnmarshalJSON for Genesis.
+func (g *Genesis[DepositT, ExecutionPayloadHeaderT]) UnmarshalJSON(
+	data []byte,
+) error {
+	type genesisMarshalable[Deposit any] struct {
+		ForkVersion            common.Version  `json:"fork_version"`
+		Deposits               []DepositT      `json:"deposits"`
+		ExecutionPayloadHeader json.RawMessage `json:"execution_payload_header"`
+	}
+	var g2 genesisMarshalable[DepositT]
+	if err := json.Unmarshal(data, &g2); err != nil {
+		return err
+	}
+
+	var (
+		payloadHeader ExecutionPayloadHeaderT
+		err           error
+	)
+	payloadHeader, err = payloadHeader.NewFromJSON(
+		g2.ExecutionPayloadHeader,
+		version.ToUint32(g2.ForkVersion),
+	)
+	if err != nil {
+		return err
+	}
+
+	g.Deposits = g2.Deposits
+	g.ForkVersion = g2.ForkVersion
+	g.ExecutionPayloadHeader = payloadHeader
+	return nil
+}
+
+// DefaultGenesisDeneb returns a the default genesis.
 func DefaultGenesisDeneb() *Genesis[
-	*types.Deposit, *types.ExecutionPayloadHeaderDeneb,
+	*types.Deposit, *types.ExecutionPayloadHeader,
 ] {
 	defaultHeader, err :=
 		DefaultGenesisExecutionPayloadHeaderDeneb()
@@ -63,12 +118,14 @@ func DefaultGenesisDeneb() *Genesis[
 	}
 
 	// TODO: Uncouple from deneb.
-	return &Genesis[*types.Deposit, *types.ExecutionPayloadHeaderDeneb]{
-		ForkVersion: version.FromUint32[primitives.Version](
+	return &Genesis[*types.Deposit, *types.ExecutionPayloadHeader]{
+		ForkVersion: version.FromUint32[common.Version](
 			version.Deneb,
 		),
-		Deposits:               make([]*types.Deposit, 0),
-		ExecutionPayloadHeader: defaultHeader,
+		Deposits: make([]*types.Deposit, 0),
+		ExecutionPayloadHeader: &types.ExecutionPayloadHeader{
+			InnerExecutionPayloadHeader: defaultHeader,
+		},
 	}
 }
 
@@ -80,8 +137,8 @@ func DefaultGenesisExecutionPayloadHeaderDeneb() (
 	// Get the merkle roots of empty transactions and withdrawals in parallel.
 	var (
 		g, _                 = errgroup.WithContext(context.Background())
-		emptyTxsRoot         primitives.Root
-		emptyWithdrawalsRoot primitives.Root
+		emptyTxsRoot         common.Root
+		emptyWithdrawalsRoot common.Root
 	)
 
 	g.Go(func() error {
@@ -104,16 +161,16 @@ func DefaultGenesisExecutionPayloadHeaderDeneb() (
 	return &types.ExecutionPayloadHeaderDeneb{
 		ParentHash:   common.ZeroHash,
 		FeeRecipient: common.ZeroAddress,
-		StateRoot: primitives.Bytes32(common.Hex2BytesFixed(
+		StateRoot: common.Bytes32(common.Hex2BytesFixed(
 			"0x12965ab9cbe2d2203f61d23636eb7e998f167cb79d02e452f532535641e35bcc",
 			constants.RootLength,
 		)),
-		ReceiptsRoot: primitives.Bytes32(common.Hex2BytesFixed(
+		ReceiptsRoot: common.Bytes32(common.Hex2BytesFixed(
 			"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
 			constants.RootLength,
 		)),
 		LogsBloom: make([]byte, constants.LogsBloomLength),
-		Random:    primitives.Bytes32{},
+		Random:    common.Bytes32{},
 		Number:    0,
 		//nolint:mnd // default value.
 		GasLimit:  math.U64(30000000),

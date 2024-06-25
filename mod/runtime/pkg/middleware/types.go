@@ -22,27 +22,35 @@ package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
-	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/genesis"
-	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/constraints"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 )
 
+// BeaconBlock is an interface for accessing the beacon block.
+type BeaconBlock[T any] interface {
+	constraints.SSZMarshallable
+	constraints.Nillable
+	GetSlot() math.Slot
+	NewFromSSZ([]byte, uint32) (T, error)
+}
+
 // BeaconState is an interface for accessing the beacon state.
 type BeaconState interface {
+	// ValidatorIndexByPubkey returns the validator index for the given pubkey.
 	ValidatorIndexByPubkey(
 		pubkey crypto.BLSPubkey,
 	) (math.ValidatorIndex, error)
-
+	// GetBlockRootAtIndex returns the block root at the given index.
 	GetBlockRootAtIndex(
 		index uint64,
-	) (primitives.Root, error)
-
+	) (common.Root, error)
+	// ValidatorIndexByCometBFTAddress returns the validator index for the given
 	ValidatorIndexByCometBFTAddress(
 		cometBFTAddress []byte,
 	) (math.ValidatorIndex, error)
@@ -51,46 +59,55 @@ type BeaconState interface {
 // BlockchainService defines the interface for interacting with the blockchain
 // state and processing blocks.
 type BlockchainService[
-	BeaconBlockT any, BlobSidecarsT ssz.Marshallable,
+	BeaconBlockT any,
+	BlobSidecarsT constraints.SSZMarshallable,
+	DepositT any,
+	GenesisT Genesis,
 ] interface {
 	// ProcessGenesisData processes the genesis data and initializes the beacon
 	// state.
 	ProcessGenesisData(
 		context.Context,
-		*genesis.Genesis[
-			*types.Deposit, *types.ExecutionPayloadHeaderDeneb,
-		],
-	) ([]*transition.ValidatorUpdate, error)
-	// ProcessBlockAndBlobs processes the given beacon block and associated
+		GenesisT,
+	) (transition.ValidatorUpdates, error)
+	// ProcessBeaconBlock processes the given beacon block and associated
 	// blobs sidecars.
-	ProcessBlockAndBlobs(
+	ProcessBeaconBlock(
 		context.Context,
 		BeaconBlockT,
-		BlobSidecarsT,
-	) ([]*transition.ValidatorUpdate, error)
-
-	// ReceiveBlockAndBlobs receives a beacon block and
+	) (transition.ValidatorUpdates, error)
+	// ReceiveBlock receives a beacon block and
 	// associated blobs sidecars for processing.
-	ReceiveBlockAndBlobs(
+	ReceiveBlock(
 		ctx context.Context,
 		blk BeaconBlockT,
-		blobs BlobSidecarsT,
 	) error
 }
 
-// ValidatorService is responsible for building beacon blocks.
-type ValidatorService[
-	BeaconBlockT any,
-	BeaconStateT any,
-	BlobSidecarsT ssz.Marshallable,
+// DAService.
+type DAService[
+	BlobSidecarsT any,
 ] interface {
-	// RequestBlockForProposal requests the best beacon block for a given slot.
-	// It returns the beacon block, associated blobs sidecars, and an error if
-	// any.
-	RequestBlockForProposal(
-		context.Context, // The context for the request.
-		math.Slot, // The slot for which the best block is requested.
-	) (BeaconBlockT, BlobSidecarsT, error)
+	// ProcessSidecars
+	ProcessSidecars(
+		context.Context,
+		BlobSidecarsT,
+	) error
+	// ReceiveSidecars
+	ReceiveSidecars(
+		_ context.Context,
+		sidecars BlobSidecarsT,
+	) error
+}
+
+// ExecutionPayloadHeader is the interface for the execution data of a block.
+type ExecutionPayloadHeader[T any] interface {
+	NewFromJSON([]byte, uint32) (T, error)
+}
+
+// Genesis is the interface for the genesis data.
+type Genesis interface {
+	json.Unmarshaler
 }
 
 // TelemetrySink is an interface for sending metrics to a telemetry backend.

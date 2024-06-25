@@ -30,7 +30,7 @@ import (
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/phase0/beacon-chain.md#validator
 //
 //nolint:lll
-//go:generate go run github.com/ferranbt/fastssz/sszgen --path validator.go -objs Validator -include ../../../primitives/pkg/crypto,../../../primitives/pkg/bytes,./withdrawal_credentials.go,../../../primitives/pkg/math -output validator.ssz.go
+//go:generate go run github.com/ferranbt/fastssz/sszgen --path validator.go -objs Validator -include ../../../primitives/pkg/crypto,../../../primitives/pkg/common,../../../primitives/pkg/bytes,./withdrawal_credentials.go,../../../primitives/pkg/math -output validator.ssz.go
 type Validator struct {
 	// Pubkey is the validator's 48-byte BLS public key.
 	Pubkey crypto.BLSPubkey `json:"pubkey"                     ssz-size:"48"`
@@ -178,7 +178,7 @@ func (v Validator) IsPartiallyWithdrawable(
 		v.HasMaxEffectiveBalance(maxEffectiveBalance) && hasExcessBalance
 }
 
-// IsWithdrawable as defined in the Ethereum 2.0 specification:
+// HasEth1WithdrawalCredentials as defined in the Ethereum 2.0 specification:
 // https://github.com/ethereum/consensus-specs/blob/dev/specs/capella/beacon-chain.md#has_eth1_withdrawal_credential
 //
 //nolint:lll

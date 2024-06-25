@@ -26,7 +26,7 @@ import (
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
 	datypes "github.com/berachain/beacon-kit/mod/da/pkg/types"
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 	"github.com/berachain/beacon-kit/mod/state-transition/pkg/core"
 	"github.com/berachain/beacon-kit/mod/state-transition/pkg/core/state"
@@ -37,8 +37,8 @@ import (
 // KVStore is a type alias for the beacon store with the generics defined using
 // primitives.
 type KVStore = beacondb.KVStore[
-	*types.Fork, *types.BeaconBlockHeader, *types.ExecutionPayloadHeader,
-	*types.Eth1Data, *types.Validator,
+	*types.BeaconBlockHeader, *types.Eth1Data, *types.ExecutionPayloadHeader,
+	*types.Fork, *types.Validator,
 ]
 
 // The AvailabilityStore interface is responsible for validating and storing
@@ -65,9 +65,13 @@ type Backend[
 	BeaconStateT core.BeaconState[
 		*types.BeaconBlockHeader, *types.Eth1Data, *types.ExecutionPayloadHeader,
 		*types.Fork, *types.Validator, *engineprimitives.Withdrawal],
+	BeaconStateMarshallableT state.BeaconStateMarshallable[
+		BeaconStateMarshallableT, *types.BeaconBlockHeader, *types.Eth1Data,
+		*types.ExecutionPayloadHeader, *types.Fork, *types.Validator,
+	],
 	DepositStoreT *deposit.KVStore[*types.Deposit],
 ] struct {
-	cs primitives.ChainSpec
+	cs common.ChainSpec
 	as AvailabilityStoreT
 	bs *KVStore
 	ds DepositStoreT
@@ -81,17 +85,25 @@ func NewBackend[
 	BeaconStateT core.BeaconState[
 		*types.BeaconBlockHeader, *types.Eth1Data,
 		*types.ExecutionPayloadHeader, *types.Fork,
-		*types.Validator, *engineprimitives.Withdrawal],
+		*types.Validator, *engineprimitives.Withdrawal,
+	],
+	BeaconStateMarshallableT state.BeaconStateMarshallable[
+		BeaconStateMarshallableT, *types.BeaconBlockHeader, *types.Eth1Data,
+		*types.ExecutionPayloadHeader, *types.Fork, *types.Validator,
+	],
 	DepositStoreT *deposit.KVStore[*types.Deposit],
 ](
-	cs primitives.ChainSpec,
+	cs common.ChainSpec,
 	as AvailabilityStoreT,
 	bs *KVStore,
 	ds DepositStoreT,
-) *Backend[AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT, DepositStoreT] {
+) *Backend[
+	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+	BeaconStateMarshallableT, DepositStoreT,
+] {
 	return &Backend[
-		AvailabilityStoreT,
-		BeaconBlockBodyT, BeaconStateT, DepositStoreT,
+		AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+		BeaconStateMarshallableT, DepositStoreT,
 	]{
 		cs: cs,
 		as: as,
@@ -103,9 +115,9 @@ func NewBackend[
 // AvailabilityStore returns the availability store struct initialized with a
 // given context.
 func (k Backend[
-	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT, DepositT,
-],
-) AvailabilityStore(
+	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+	BeaconStateMarshallableT, DepositStoreT,
+]) AvailabilityStore(
 	_ context.Context,
 ) AvailabilityStoreT {
 	return k.as
@@ -114,25 +126,30 @@ func (k Backend[
 // BeaconState returns the beacon state struct initialized with a given
 // context and the store key.
 func (k Backend[
-	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT, DepositT,
+	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+	BeaconStateMarshallableT, DepositStoreT,
 ]) StateFromContext(
 	ctx context.Context,
 ) BeaconStateT {
-	return state.NewBeaconStateFromDB[BeaconStateT](
+	return state.NewBeaconStateFromDB[
+		BeaconStateT, BeaconStateMarshallableT,
+	](
 		k.bs.WithContext(ctx), k.cs,
 	)
 }
 
 // BeaconStore returns the beacon store struct.
 func (k Backend[
-	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT, DepositStoreT,
+	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+	BeaconStateMarshallableT, DepositStoreT,
 ]) BeaconStore() *KVStore {
 	return k.bs
 }
 
 // DepositStore returns the deposit store struct initialized with a.
 func (k Backend[
-	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT, DepositStoreT,
+	AvailabilityStoreT, BeaconBlockBodyT, BeaconStateT,
+	BeaconStateMarshallableT, DepositStoreT,
 ]) DepositStore(
 	_ context.Context,
 ) DepositStoreT {

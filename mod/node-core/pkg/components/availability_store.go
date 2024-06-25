@@ -21,14 +21,14 @@
 package components
 
 import (
+	"errors"
 	"os"
 
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
-	"github.com/berachain/beacon-kit/mod/async/pkg/event"
 	"github.com/berachain/beacon-kit/mod/consensus-types/pkg/types"
 	dastore "github.com/berachain/beacon-kit/mod/da/pkg/store"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/storage/pkg/filedb"
 	"github.com/berachain/beacon-kit/mod/storage/pkg/manager"
 	"github.com/berachain/beacon-kit/mod/storage/pkg/pruner"
@@ -42,7 +42,7 @@ import (
 type AvailabilityStoreInput struct {
 	depinject.In
 	AppOpts   servertypes.AppOptions
-	ChainSpec primitives.ChainSpec
+	ChainSpec common.ChainSpec
 	Logger    log.Logger
 }
 
@@ -75,8 +75,8 @@ func ProvideAvailibilityStore[
 type AvailabilityPrunerInput struct {
 	depinject.In
 	AvailabilityStore *AvailabilityStore
-	BlockFeed         *BlockFeed
-	ChainSpec         primitives.ChainSpec
+	BlockBroker       *BlockBroker
+	ChainSpec         common.ChainSpec
 	Logger            log.Logger
 }
 
@@ -84,22 +84,32 @@ type AvailabilityPrunerInput struct {
 // framework.
 func ProvideAvailabilityPruner(
 	in AvailabilityPrunerInput,
-) pruner.Pruner[*filedb.RangeDB] {
-	rangeDB, _ := in.AvailabilityStore.IndexDB.(*filedb.RangeDB)
+) (pruner.Pruner[*filedb.RangeDB], error) {
+	rangeDB, ok := in.AvailabilityStore.IndexDB.(*filedb.RangeDB)
+	if !ok {
+		in.Logger.Error("availability store does not have a range db")
+		return nil, errors.New("availability store does not have a range db")
+	}
+
+	subCh, err := in.BlockBroker.Subscribe()
+	if err != nil {
+		in.Logger.Error("failed to subscribe to block feed", "err", err)
+		return nil, err
+	}
+
 	// build the availability pruner if IndexDB is available.
 	return pruner.NewPruner[
 		*BeaconBlock,
 		*BlockEvent,
 		*filedb.RangeDB,
-		event.Subscription,
 	](
 		in.Logger.With("service", manager.AvailabilityPrunerName),
 		rangeDB,
 		manager.AvailabilityPrunerName,
-		in.BlockFeed,
+		subCh,
 		dastore.BuildPruneRangeFn[
 			*BeaconBlock,
 			*BlockEvent,
 		](in.ChainSpec),
-	)
+	), nil
 }

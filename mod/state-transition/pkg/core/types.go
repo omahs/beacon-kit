@@ -22,16 +22,13 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
-	"github.com/berachain/beacon-kit/mod/primitives"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/bytes"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/constraints"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/eip4844"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz"
 )
 
 // The AvailabilityStore interface is responsible for validating and storing
@@ -86,8 +83,7 @@ type BeaconBlockBody[
 	ExecutionPayloadHeaderT interface{ GetBlockHash() common.ExecutionHash },
 	WithdrawalT any,
 ] interface {
-	// Empty returns an empty beacon block body.
-	Empty(uint32) BeaconBlockBodyT
+	constraints.EmptyWithVersion[BeaconBlockBodyT]
 	// GetRandaoReveal returns the RANDAO reveal signature.
 	GetRandaoReveal() crypto.BLSSignature
 	// GetExecutionPayload returns the execution payload.
@@ -156,18 +152,14 @@ type Deposit[
 type ExecutionPayload[
 	ExecutionPayloadT, ExecutionPayloadHeaderT, WithdrawalT any,
 ] interface {
-	ssz.Marshallable
-	json.Marshaler
-	json.Unmarshaler
-	Empty(uint32) ExecutionPayloadT
-	Version() uint32
+	constraints.EngineType[ExecutionPayloadT]
 	GetTransactions() [][]byte
 	GetParentHash() common.ExecutionHash
 	GetBlockHash() common.ExecutionHash
-	GetPrevRandao() bytes.B32
+	GetPrevRandao() common.Bytes32
 	GetWithdrawals() []WithdrawalT
 	GetFeeRecipient() common.ExecutionAddress
-	GetStateRoot() bytes.B32
+	GetStateRoot() common.Bytes32
 	GetReceiptsRoot() common.Root
 	GetLogsBloom() []byte
 	GetNumber() math.U64
@@ -179,16 +171,14 @@ type ExecutionPayload[
 	GetBlobGasUsed() math.U64
 	GetExcessBlobGas() math.U64
 	ToHeader() (ExecutionPayloadHeaderT, error)
-	IsNil() bool
 }
 
 type ExecutionPayloadHeader interface {
-	Version() uint32
 	GetParentHash() common.ExecutionHash
 	GetBlockHash() common.ExecutionHash
-	GetPrevRandao() bytes.B32
+	GetPrevRandao() common.Bytes32
 	GetFeeRecipient() common.ExecutionAddress
-	GetStateRoot() bytes.B32
+	GetStateRoot() common.Bytes32
 	GetReceiptsRoot() common.Root
 	GetLogsBloom() []byte
 	GetNumber() math.U64
@@ -219,7 +209,7 @@ type ExecutionEngine[
 // ForkData is the interface for the fork data.
 type ForkData[ForkDataT any] interface {
 	// New creates a new fork data object.
-	New(primitives.Version, primitives.Root) ForkDataT
+	New(common.Version, common.Root) ForkDataT
 	// ComputeRandaoSigningRoot returns the signing root for the fork data.
 	ComputeRandaoSigningRoot(
 		domainType common.DomainType,
@@ -233,7 +223,7 @@ type Validator[
 	ValidatorT any,
 	WithdrawalCredentialsT ~[32]byte,
 ] interface {
-	ssz.Marshallable
+	constraints.SSZMarshallable
 	// New creates a new validator with the given parameters.
 	New(
 		pubkey crypto.BLSPubkey,

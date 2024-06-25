@@ -21,37 +21,38 @@
 package builder
 
 import (
-	"os"
+	"context"
+	"io"
 
-	"cosmossdk.io/client/v2/autocli"
 	"cosmossdk.io/depinject"
 	"cosmossdk.io/log"
-	cmdlib "github.com/berachain/beacon-kit/mod/cli/pkg/commands"
+	"github.com/berachain/beacon-kit/mod/consensus/pkg/comet"
+	"github.com/berachain/beacon-kit/mod/node-core/pkg/app"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/components"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/node"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/types"
-	"github.com/berachain/beacon-kit/mod/primitives"
-	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/config"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
+	"github.com/berachain/beacon-kit/mod/runtime/pkg/service"
+	dbm "github.com/cosmos/cosmos-db"
+	"github.com/cosmos/cosmos-sdk/runtime"
 	"github.com/cosmos/cosmos-sdk/server"
-	"github.com/cosmos/cosmos-sdk/types/module"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	servertypes "github.com/cosmos/cosmos-sdk/server/types"
 )
 
-type NodeBuilder[NodeT types.NodeI] struct {
+// TODO: #Make nodebuilder build a node. Currently this is just a builder for
+// the AppCreator function, which is eventually called by cosmos to build a
+// node.
+type NodeBuilder[NodeT types.Node] struct {
 	node NodeT
-
-	name         string
-	description  string
+	// depinjectCfg holds is an extendable config container used by the
+	// depinject framework.
 	depInjectCfg depinject.Config
-
 	// components is a list of components to provide.
 	components []any
 }
 
 // New returns a new NodeBuilder.
-func New[NodeT types.NodeI](opts ...Opt[NodeT]) *NodeBuilder[NodeT] {
+func New[NodeT types.Node](opts ...Opt[NodeT]) *NodeBuilder[NodeT] {
 	nb := &NodeBuilder[NodeT]{
 		node: node.New[NodeT](),
 	}
@@ -61,105 +62,73 @@ func New[NodeT types.NodeI](opts ...Opt[NodeT]) *NodeBuilder[NodeT] {
 	return nb
 }
 
-// Build builds the application.
-func (nb *NodeBuilder[NodeT]) Build() (NodeT, error) {
-	rootCmd, err := nb.buildRootCmd()
-	if err != nil {
-		return nb.node, err
+// Build uses the node builder options and runtime parameters to
+// build a new instance of the node.
+// It is necessary to adhere to the types.AppCreator[T] interface.
+func (nb *NodeBuilder[NodeT]) Build(
+	logger log.Logger,
+	db dbm.DB,
+	traceStore io.Writer,
+	appOpts servertypes.AppOptions,
+) NodeT {
+	// Check for goleveldb cause bad project.
+	if appOpts.Get("app-db-backend") == "goleveldb" {
+		panic("goleveldb is not supported")
 	}
 
-	nb.node.SetRootCmd(rootCmd)
-	return nb.node, nil
-}
-
-// buildRootCmd builds the root command for the application.
-func (nb *NodeBuilder[NodeT]) buildRootCmd() (*cobra.Command, error) {
-	// dependencies for the root command
+	// variables to hold the components needed to set up BeaconApp
 	var (
-		autoCliOpts autocli.AppOptions
-		mm          *module.Manager
-		clientCtx   client.Context
-		chainSpec   primitives.ChainSpec
+		chainSpec       common.ChainSpec
+		appBuilder      *runtime.AppBuilder
+		abciMiddleware  *components.ABCIMiddleware
+		serviceRegistry *service.Registry
 	)
-	// build dependencies for the root command
+
+	// build all node components using depinject
 	if err := depinject.Inject(
 		depinject.Configs(
 			nb.depInjectCfg,
-			depinject.Supply(
-				log.NewLogger(os.Stdout),
-				viper.GetViper(),
-				// empty middleware must be supplied here because it is a direct
-				// dependency of the Module
-				emptyABCIMiddleware(),
-			),
 			depinject.Provide(
-				components.ProvideNoopTxConfig,
-				components.ProvideClientContext,
-				components.ProvideKeyring,
-				components.ProvideConfig,
-				components.ProvideChainSpec,
+				nb.components...,
+			),
+			depinject.Supply(
+				appOpts,
+				logger,
+			),
+			depinject.Invoke(
+				SetLoggerConfig,
 			),
 		),
-		&autoCliOpts,
-		&mm,
-		&clientCtx,
+		&appBuilder,
 		&chainSpec,
+		&abciMiddleware,
+		&serviceRegistry,
 	); err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	cmd := &cobra.Command{
-		Use:   nb.name,
-		Short: nb.description,
-		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-			// set the default command outputs
-			cmd.SetOut(cmd.OutOrStdout())
-			cmd.SetErr(cmd.ErrOrStderr())
+	// This is a bit of a meme until server/v2.
+	consensusEngine := comet.NewConsensus(abciMiddleware)
 
-			var err error
-			clientCtx, err = client.ReadPersistentCommandFlags(
-				clientCtx,
-				cmd.Flags(),
-			)
-			if err != nil {
-				return err
-			}
-
-			customClientTemplate, customClientConfig := components.InitClientConfig()
-			clientCtx, err = config.CreateClientConfig(
-				clientCtx,
-				customClientTemplate,
-				customClientConfig,
-			)
-			if err != nil {
-				return err
-			}
-
-			if err = client.SetCmdClientContextHandler(
-				clientCtx, cmd,
-			); err != nil {
-				return err
-			}
-
-			return server.InterceptConfigsPreRunHandler(
-				cmd,
-				DefaultAppConfigTemplate(),
-				DefaultAppConfig(),
-				DefaultCometConfig(),
-			)
-		},
-	}
-
-	cmdlib.DefaultRootCommandSetup(
-		cmd,
-		mm,
-		nb.AppCreator,
-		chainSpec,
+	// set the application to a new BeaconApp with necessary ABCI handlers
+	nb.node.RegisterApp(
+		app.NewBeaconKitApp(
+			db, traceStore, true, appBuilder,
+			append(
+				server.DefaultBaseappOptions(appOpts),
+				WithCometParamStore(chainSpec),
+				WithPrepareProposal(consensusEngine.PrepareProposal),
+				WithProcessProposal(consensusEngine.ProcessProposal),
+				WithPreBlocker(consensusEngine.PreBlock),
+			)...,
+		),
 	)
+	nb.node.SetServiceRegistry(serviceRegistry)
 
-	if err := autoCliOpts.EnhanceRootCommand(cmd); err != nil {
-		return nil, err
+	// TODO: put this in some post node creation hook/listener.
+	if err := nb.node.Start(context.Background()); err != nil {
+		logger.Error("failed to start node", "err", err)
+		panic(err)
 	}
-
-	return cmd, nil
+	return nb.node
 }

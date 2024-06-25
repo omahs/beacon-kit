@@ -21,8 +21,17 @@
 package events
 
 const (
-	MissedSlot = iota
-	BeaconBlockAccepted
-	BeaconBlockRejected
-	BeaconBlockFinalized
+	MissedSlot                  = "missed-slot"
+	NewSlot                     = "new-slot"
+	BeaconBlockBuilt            = "beacon-block-built"
+	BeaconBlockReceived         = "beacon-block-received"
+	BeaconBlockVerified         = "beacon-block-verified"
+	BeaconBlockRejected         = "beacon-block-rejected"
+	BeaconBlockFinalizedRequest = "beacon-block-finalized-request"
+	BeaconBlockFinalized        = "beacon-block-finalized"
+	ValidatorSetUpdated         = "validator-set-updated"
+	BlobSidecarsBuilt           = "blob-sidecars-built"
+	BlobSidecarsReceived        = "blob-sidecars-received"
+	BlobSidecarsProcessRequest  = "blob-sidecars-process-request"
+	BlobSidecarsProcessed       = "blob-sidecars-processed"
 )

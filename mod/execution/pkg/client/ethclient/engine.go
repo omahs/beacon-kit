@@ -24,7 +24,6 @@ import (
 	"context"
 
 	engineprimitives "github.com/berachain/beacon-kit/mod/engine-primitives/pkg/engine-primitives"
-	"github.com/berachain/beacon-kit/mod/primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/eip4844"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/version"
@@ -39,7 +38,7 @@ func (s *Eth1Client[ExecutionPayloadT]) NewPayload(
 	ctx context.Context,
 	payload ExecutionPayloadT,
 	versionedHashes []common.ExecutionHash,
-	parentBlockRoot *primitives.Root,
+	parentBlockRoot *common.Root,
 ) (*engineprimitives.PayloadStatusV1, error) {
 	switch payload.Version() {
 	case version.Deneb:
@@ -56,7 +55,7 @@ func (s *Eth1Client[ExecutionPayloadT]) NewPayloadV3(
 	ctx context.Context,
 	payload ExecutionPayloadT,
 	versionedHashes []common.ExecutionHash,
-	parentBlockRoot *primitives.Root,
+	parentBlockRoot *common.Root,
 ) (*engineprimitives.PayloadStatusV1, error) {
 	result := &engineprimitives.PayloadStatusV1{}
 	if err := s.Client.Client().CallContext(
@@ -77,7 +76,7 @@ func (s *Eth1Client[ExecutionPayloadT]) NewPayloadV3(
 func (s *Eth1Client[ExecutionPayloadT]) ForkchoiceUpdated(
 	ctx context.Context,
 	state *engineprimitives.ForkchoiceStateV1,
-	attrs engineprimitives.PayloadAttributer,
+	attrs any,
 	forkVersion uint32,
 ) (*engineprimitives.ForkchoiceResponseV1, error) {
 	switch forkVersion {
@@ -92,7 +91,7 @@ func (s *Eth1Client[ExecutionPayloadT]) ForkchoiceUpdated(
 func (s *Eth1Client[ExecutionPayloadT]) ForkchoiceUpdatedV3(
 	ctx context.Context,
 	state *engineprimitives.ForkchoiceStateV1,
-	attrs engineprimitives.PayloadAttributer,
+	attrs any,
 ) (*engineprimitives.ForkchoiceResponseV1, error) {
 	return s.forkchoiceUpdated(ctx, ForkchoiceUpdatedMethodV3, state, attrs)
 }

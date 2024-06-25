@@ -21,8 +21,6 @@
 package core
 
 import (
-	"github.com/berachain/beacon-kit/mod/primitives"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/bytes"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
@@ -35,16 +33,14 @@ import (
 //
 //nolint:gocognit,funlen // todo fix.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, BeaconBlockBodyT, BeaconBlockHeaderT, BeaconStateT, _, _, DepositT,
+	Eth1DataT, _, ExecutionPayloadHeaderT, ForkT, _, ValidatorT, _, _,
 ]) InitializePreminedBeaconStateFromEth1(
 	st BeaconStateT,
 	deposits []DepositT,
 	executionPayloadHeader ExecutionPayloadHeaderT,
-	genesisVersion primitives.Version,
-) ([]*transition.ValidatorUpdate, error) {
+	genesisVersion common.Version,
+) (transition.ValidatorUpdates, error) {
 	var (
 		blkHeader BeaconBlockHeaderT
 		blkBody   BeaconBlockBodyT
@@ -70,14 +66,14 @@ func (sp *StateProcessor[
 	}
 
 	if err := st.SetEth1Data(eth1Data.New(
-		bytes.B32(common.ZeroHash),
+		common.Bytes32(common.ZeroHash),
 		0,
 		executionPayloadHeader.GetBlockHash(),
 	)); err != nil {
 		return nil, err
 	}
 
-	// TODO: we need to handle primitives.Version vs
+	// TODO: we need to handle common.Version vs
 	// uint32 better.
 	bodyRoot, err := blkBody.Empty(
 		version.ToUint32(genesisVersion)).HashTreeRoot()
@@ -94,15 +90,10 @@ func (sp *StateProcessor[
 	for i := range sp.cs.EpochsPerHistoricalVector() {
 		if err = st.UpdateRandaoMixAtIndex(
 			i,
-			bytes.B32(executionPayloadHeader.GetBlockHash()),
+			common.Bytes32(executionPayloadHeader.GetBlockHash()),
 		); err != nil {
 			return nil, err
 		}
-	}
-
-	// Prime the db so that processDeposit doesn't fail.
-	if err = st.SetGenesisValidatorsRoot(primitives.Root{}); err != nil {
-		return nil, err
 	}
 
 	for _, deposit := range deposits {
@@ -119,9 +110,9 @@ func (sp *StateProcessor[
 		return nil, err
 	}
 
-	var validatorsRoot primitives.Root
+	var validatorsRoot common.Root
 	validatorsRoot, err = ssz.MerkleizeListComposite[
-		common.ChainSpec, math.U64, [32]byte,
+		common.ChainSpec, math.U64,
 	](validators, uint64(len(validators)))
 	if err != nil {
 		return nil, err
@@ -140,10 +131,10 @@ func (sp *StateProcessor[
 	// Setup a bunch of 0s to prime the DB.
 	for i := range sp.cs.HistoricalRootsLimit() {
 		//#nosec:G701 // won't overflow in practice.
-		if err = st.UpdateBlockRootAtIndex(i, primitives.Root{}); err != nil {
+		if err = st.UpdateBlockRootAtIndex(i, common.Root{}); err != nil {
 			return nil, err
 		}
-		if err = st.UpdateStateRootAtIndex(i, primitives.Root{}); err != nil {
+		if err = st.UpdateStateRootAtIndex(i, common.Root{}); err != nil {
 			return nil, err
 		}
 	}
@@ -162,7 +153,7 @@ func (sp *StateProcessor[
 		return nil, err
 	}
 
-	var updates []*transition.ValidatorUpdate
+	var updates transition.ValidatorUpdates
 	updates, err = sp.processSyncCommitteeUpdates(st)
 	if err != nil {
 		return nil, err

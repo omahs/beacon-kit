@@ -22,7 +22,7 @@ package core
 
 import (
 	"github.com/berachain/beacon-kit/mod/errors"
-	"github.com/berachain/beacon-kit/mod/primitives"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/version"
 	"github.com/davecgh/go-spew/spew"
@@ -31,10 +31,7 @@ import (
 // processOperations processes the operations and ensures they match the
 // local state.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	BeaconBlockT, _, _, BeaconStateT, _, _, _, _, _, _, _, _, _, _, _,
 ]) processOperations(
 	st BeaconStateT,
 	blk BeaconBlockT,
@@ -62,13 +59,10 @@ func (sp *StateProcessor[
 	return sp.processDeposits(st, deposits)
 }
 
-// ProcessDeposits processes the deposits and ensures they match the
+// processDeposits processes the deposits and ensures they match the
 // local state.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, DepositT, _, _, _, _, _, _, _, _,
 ]) processDeposits(
 	st BeaconStateT,
 	deposits []DepositT,
@@ -84,10 +78,7 @@ func (sp *StateProcessor[
 
 // processDeposit processes the deposit and ensures it matches the local state.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, DepositT, _, _, _, _, _, _, _, _,
 ]) processDeposit(
 	st BeaconStateT,
 	dep DepositT,
@@ -117,12 +108,9 @@ func (sp *StateProcessor[
 	return sp.applyDeposit(st, dep)
 }
 
-// processDeposit processes the deposit and ensures it matches the local state.
+// applyDeposit processes the deposit and ensures it matches the local state.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, DepositT, _, _, _, _, _, ValidatorT, _, _,
 ]) applyDeposit(
 	st BeaconStateT,
 	dep DepositT,
@@ -149,25 +137,16 @@ func (sp *StateProcessor[
 
 // createValidator creates a validator if the deposit is valid.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, DepositT, _, _, _, _, ForkDataT, _, _, _,
 ]) createValidator(
 	st BeaconStateT,
 	dep DepositT,
 ) error {
 	var (
-		genesisValidatorsRoot primitives.Root
+		genesisValidatorsRoot common.Root
 		epoch                 math.Epoch
 		err                   error
 	)
-
-	// Get the genesis validators root to be used to find fork data later.
-	genesisValidatorsRoot, err = st.GetGenesisValidatorsRoot()
-	if err != nil {
-		return err
-	}
 
 	// Get the current epoch.
 	// Get the current slot.
@@ -175,13 +154,25 @@ func (sp *StateProcessor[
 	if err != nil {
 		return err
 	}
+
+	// At genesis, the validators sign over an empty root.
+	if slot == 0 {
+		genesisValidatorsRoot = common.Root{}
+	} else {
+		// Get the genesis validators root to be used to find fork data later.
+		genesisValidatorsRoot, err = st.GetGenesisValidatorsRoot()
+		if err != nil {
+			return err
+		}
+	}
+
 	epoch = sp.cs.SlotToEpoch(slot)
 
 	// Verify that the message was signed correctly.
 	var d ForkDataT
 	if err = dep.VerifySignature(
 		d.New(
-			version.FromUint32[primitives.Version](
+			version.FromUint32[common.Version](
 				sp.cs.ActiveForkVersionForEpoch(epoch),
 			), genesisValidatorsRoot,
 		),
@@ -197,10 +188,7 @@ func (sp *StateProcessor[
 
 // addValidatorToRegistry adds a validator to the registry.
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, _, _, BeaconStateT, _, _, DepositT, _, _, _, _, _, ValidatorT, _, _,
 ]) addValidatorToRegistry(
 	st BeaconStateT,
 	dep DepositT,
@@ -231,10 +219,7 @@ func (sp *StateProcessor[
 //
 //nolint:lll
 func (sp *StateProcessor[
-	BeaconBlockT, BeaconBlockBodyT, BeaconBlockHeaderT,
-	BeaconStateT, BlobSidecarsT, ContextT,
-	DepositT, Eth1DataT, ExecutionPayloadT, ExecutionPayloadHeaderT,
-	ForkT, ForkDataT, ValidatorT, WithdrawalT, WithdrawalCredentialsT,
+	_, BeaconBlockBodyT, _, BeaconStateT, _, _, _, _, _, _, _, _, _, _, _,
 ]) processWithdrawals(
 	st BeaconStateT,
 	body BeaconBlockBodyT,

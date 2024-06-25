@@ -21,19 +21,22 @@
 package types
 
 import (
+	"context"
+
+	"github.com/berachain/beacon-kit/mod/runtime/pkg/service"
 	servertypes "github.com/cosmos/cosmos-sdk/server/types"
-	"github.com/spf13/cobra"
 )
 
-// NodeI is an interface for the node application.
+// Node defines the API for the node application.
 // It extends the Application interface from the Cosmos SDK.
-type NodeI interface {
+type Node interface {
 	servertypes.Application
 
-	Run() error
+	// Start starts the node.
+	Start(ctx context.Context) error
 
-	SetAppName(name string)
-	SetAppDescription(description string)
-	SetRootCmd(cmd *cobra.Command)
-	SetApplication(app servertypes.Application)
+	// RegisterApp sets the node's application.
+	RegisterApp(app servertypes.Application)
+	// SetServiceRegistry sets the node's service registry.
+	SetServiceRegistry(registry *service.Registry)
 }

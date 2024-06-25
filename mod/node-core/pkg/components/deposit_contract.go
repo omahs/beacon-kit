@@ -23,33 +23,22 @@ package components
 import (
 	"cosmossdk.io/depinject"
 	"github.com/berachain/beacon-kit/mod/execution/pkg/deposit"
-	"github.com/berachain/beacon-kit/mod/interfaces"
-	"github.com/berachain/beacon-kit/mod/primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 )
 
 // BeaconDepositContractInput is the input for the beacon deposit contract
 // for the dep inject framework.
 type BeaconDepositContractInput struct {
 	depinject.In
-	ChainSpec    primitives.ChainSpec
+	ChainSpec    common.ChainSpec
 	EngineClient *EngineClient
 }
 
 // ProvideBeaconDepositContract provides a beacon deposit contract through the
 // dep inject framework.
 func ProvideBeaconDepositContract[
-	DepositT interfaces.Deposit[
-		crypto.BLSPubkey, crypto.BLSSignature,
-		DepositT, math.U64, WithdrawalCredentialsT,
-	],
-	ExecutionPayloadT interfaces.ExecutionPayload[
-		ExecutionPayloadT, common.ExecutionAddress,
-		common.ExecutionHash, primitives.Bytes32,
-		math.U64, math.Wei, []byte, WithdrawalT,
-	],
+	DepositT deposit.Deposit[DepositT, WithdrawalCredentialsT],
+	ExecutionPayloadT deposit.ExecutionPayload,
 	WithdrawalT any,
 	WithdrawalCredentialsT ~[32]byte,
 ](

@@ -24,9 +24,13 @@ import (
 	"log/slog"
 	"os"
 
+	clibuilder "github.com/berachain/beacon-kit/mod/cli/pkg/builder"
+	clicomponents "github.com/berachain/beacon-kit/mod/cli/pkg/components"
 	nodebuilder "github.com/berachain/beacon-kit/mod/node-core/pkg/builder"
-	"github.com/berachain/beacon-kit/mod/node-core/pkg/components"
+	nodecomponents "github.com/berachain/beacon-kit/mod/node-core/pkg/components"
+	beacon "github.com/berachain/beacon-kit/mod/node-core/pkg/components/module"
 	"github.com/berachain/beacon-kit/mod/node-core/pkg/types"
+	"github.com/cosmos/cosmos-sdk/server"
 	"go.uber.org/automaxprocs/maxprocs"
 )
 
@@ -39,29 +43,57 @@ func run() error {
 
 	// Build the node using the node-core.
 	nb := nodebuilder.New(
-		// Set the Name to the Default.
-		nodebuilder.WithName[types.NodeI](
-			nodebuilder.DefaultAppName),
-		// Set the Description to the Default.
-		nodebuilder.WithDescription[types.NodeI](
-			nodebuilder.DefaultDescription),
 		// Set the DepInject Configuration to the Default.
-		nodebuilder.WithDepInjectConfig[types.NodeI](
+		nodebuilder.WithDepInjectConfig[types.Node](
 			nodebuilder.DefaultDepInjectConfig()),
 		// Set the Runtime Components to the Default.
-		nodebuilder.WithComponents[types.NodeI](
-			components.DefaultComponentsWithStandardTypes(),
+		nodebuilder.WithComponents[types.Node](
+			nodecomponents.DefaultComponentsWithStandardTypes(),
 		),
 	)
 
-	// Assemble the node with all our components.
-	node, err := nb.Build()
+	// Build the root command using the builder
+	cb := clibuilder.New(
+		// Set the Name to the Default.
+		clibuilder.WithName[types.Node](nodebuilder.DefaultAppName),
+		// Set the Description to the Default.
+		clibuilder.WithDescription[types.Node](nodebuilder.DefaultDescription),
+		// Set the DepInject Configuration to the Default.
+		clibuilder.WithDepInjectConfig[types.Node](
+			nodebuilder.DefaultDepInjectConfig(),
+		),
+		// Set the Runtime Components to the Default.
+		clibuilder.WithComponents[types.Node](
+			append(
+				clicomponents.DefaultClientComponents(),
+				// TODO: remove these, and eventually pull cfg and chainspec
+				// from built node
+				nodecomponents.ProvideNoopTxConfig,
+				nodecomponents.ProvideConfig,
+				nodecomponents.ProvideChainSpec,
+			),
+		),
+		clibuilder.SupplyModuleDeps[types.Node](
+			beacon.SupplyModuleDependencies(),
+		),
+		// Set the Run Handler to the Default.
+		clibuilder.WithRunHandler[types.Node](
+			server.InterceptConfigsPreRunHandler,
+		),
+		// Set the NodeBuilderFunc to the NodeBuilder Build.
+		clibuilder.WithNodeBuilderFunc[types.Node](nb.Build),
+	)
+
+	cmd, err := cb.Build()
 	if err != nil {
 		return err
 	}
 
-	// TODO: create a "runner" type harness that takes the node as a parameter.
-	return node.Run()
+	// eventually we want to decouple from cosmos cli, and just pass in a built
+	// Node and Cmd to a runner
+
+	// for now, running the cmd will start the node
+	return cmd.Run(clicomponents.DefaultNodeHome)
 }
 
 // main is the entry point.

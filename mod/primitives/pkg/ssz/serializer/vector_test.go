@@ -18,40 +18,40 @@
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND
 // TITLE.
 
-package genesis
+package serializer_test
 
 import (
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
-	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/spf13/cobra"
+	"testing"
+
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz/serializer"
 )
 
-// Commands builds the genesis-related command. Users may
-// provide application specific commands as a parameter.
-func Commands(
-	cs common.ChainSpec,
-	cmds ...*cobra.Command,
-) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:                        "genesis",
-		Short:                      "Application's genesis-related subcommands",
-		DisableFlagParsing:         false,
-		SuggestionsMinimumDistance: 2, //nolint:mnd // from sdk.
-		RunE:                       client.ValidateCmd,
+type MockType struct {
+	data []byte
+}
+
+func (m MockType) NewFromSSZ(data []byte) (MockType, error) {
+	return MockType{data: data}, nil
+}
+
+func (m MockType) SizeSSZ() int {
+	return 10
+}
+
+func BenchmarkUnmarshalVectorFixed(b *testing.B) {
+	// Prepare a buffer with mock data
+	elementSize := 10
+	numElements := 1000
+	buf := make([]byte, elementSize*numElements)
+	for i := 0; i < len(buf); i++ {
+		buf[i] = byte(i % 256)
 	}
 
-	// Adding subcommands for genesis-related operations.
-	cmd.AddCommand(
-		AddGenesisDepositCmd(cs),
-		CollectGenesisDepositsCmd(),
-		AddExecutionPayloadCmd(cs),
-		GetGenesisValidatorRootCmd(cs),
-	)
-
-	// Add additional commands
-	for _, subCmd := range cmds {
-		cmd.AddCommand(subCmd)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := serializer.UnmarshalVectorFixed[MockType](buf)
+		if err != nil {
+			b.Fatalf("unexpected error: %v", err)
+		}
 	}
-
-	return cmd
 }

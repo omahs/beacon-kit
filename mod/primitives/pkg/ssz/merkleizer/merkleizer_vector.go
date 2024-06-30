@@ -18,17 +18,38 @@
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND
 // TITLE.
 
-package merkle
+package merkleizer
 
-// U64 is an interface that wraps the uint64 type.
-// It is used to prevent circular dependencies between
-// the merkle package and the primitives package.
-type U64[T ~uint64] interface {
-	~uint64
-	// NextPowerOfTwo returns the smallest power of
-	// two that is greater than or equal to T.
-	NextPowerOfTwo() T
-	// ILog2Ceil returns the ceiling of the binary
-	// logarithm of T as a uint8.
-	ILog2Ceil() uint8
+// MerkleizeVectorBasic implements the SSZ merkleization algorithm
+// for a vector of basic types.
+func (m *merkleizer[RootT, T]) MerkleizeVectorBasic(
+	value []T,
+) (RootT, error) {
+	// merkleize(pack(value))
+	// if value is a basic object or a vector of basic objects.
+	packed, _, err := pack[RootT](value)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return m.Merkleize(packed)
+}
+
+// MerkleizeVectorComposite implements the SSZ merkleization algorithm for a
+// vector
+// of composite types.
+func (m *merkleizer[RootT, T]) MerkleizeVectorComposite(
+	value []T,
+) (RootT, error) {
+	var (
+		err  error
+		htrs = m.bytesBuffer.Get(len(value))
+	)
+
+	for i, el := range value {
+		htrs[i], err = el.HashTreeRoot()
+		if err != nil {
+			return RootT{}, err
+		}
+	}
+	return m.Merkleize(htrs)
 }

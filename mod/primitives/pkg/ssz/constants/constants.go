@@ -18,38 +18,39 @@
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND
 // TITLE.
 
-package merkleizer
+package constants
 
-// MerkleizeVectorBasic implements the SSZ merkleization algorithm
-// for a vector of basic types.
-func (m *merkleizer[RootT, T]) MerkleizeVectorBasic(
-	value []T,
-) (RootT, error) {
-	// merkleize(pack(value))
-	// if value is a basic object or a vector of basic objects.
-	packed, _, err := pack[RootT](value)
-	if err != nil {
-		return [32]byte{}, err
-	}
-	return m.Merkleize(packed)
-}
+const (
+	// BytesPerChunk is the number of bytes per chunk.
+	BytesPerChunk = 32
 
-// MerkleizeVectorComposite implements the SSZ merkleization algorithm for a
-// vector
-// of composite types.
-func (m *merkleizer[RootT, T]) MerkleizeVectorComposite(
-	value []T,
-) (RootT, error) {
-	var (
-		err  error
-		htrs = m.bytesBuffer.Get(len(value))
-	)
+	// BytesPerLengthOffset is the number of bytes per serialized length offset.
+	BytesPerLengthOffset = 4
 
-	for i, el := range value {
-		htrs[i], err = el.HashTreeRoot()
-		if err != nil {
-			return RootT{}, err
-		}
-	}
-	return m.Merkleize(htrs)
-}
+	// BitsPerByte is the number of bits per byte.
+	BitsPerByte = 8
+
+	// ByteSize is the size of a single byte.
+	ByteSize = 1
+
+	// BoolSize is the size of a boolean in bytes.
+	BoolSize = 1
+
+	// U8Size is the size of an 8-bit unsigned integer in bytes.
+	U8Size = 1
+
+	// U16Size is the size of a 16-bit unsigned integer in bytes.
+	U16Size = 2
+
+	// U32Size is the size of a 32-bit unsigned integer in bytes.
+	U32Size = 4
+
+	// U64Size is the size of a 64-bit unsigned integer in bytes.
+	U64Size = 8
+
+	// U128Size is the size of a 128-bit unsigned integer in bytes.
+	U128Size = 16
+
+	// U256Size is the size of a 256-bit unsigned integer in bytes.
+	U256Size = 32
+)

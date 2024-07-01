@@ -18,22 +18,9 @@
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, NON-INFRINGEMENT, AND
 // TITLE.
 
-package merkleizer
+package ssz
 
-// Merkleizer can be used for merkleizing SSZ types.
-type Merkleizer[
-	RootT ~[32]byte, T SSZObject[RootT],
-] interface {
-	MerkleizeBasic(value T) (RootT, error)
-	MerkleizeVectorBasic(value []T) (RootT, error)
-	MerkleizeListBasic(value []T, limit ...uint64) (RootT, error)
-	MerkleizeVectorComposite(value []T) (RootT, error)
-	MerkleizeListComposite(value []T, limit ...uint64) (RootT, error)
-	MerkleizeByteSlice(value []byte) (RootT, error)
-	Merkleize(chunks []RootT, limit ...uint64) (RootT, error)
+import "github.com/berachain/beacon-kit/mod/errors"
 
-	// TODO: Move to a separate Merkleizer type for container(s).
-	MerkleizeContainer(
-		value SSZObject[RootT],
-	) (RootT, error)
-}
+// ErrUnknownType is returned when an unknown type is encountered.
+var ErrUnknownType = errors.New("unknown type")

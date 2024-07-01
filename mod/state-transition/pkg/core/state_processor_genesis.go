@@ -21,10 +21,11 @@
 package core
 
 import (
+	gethprimitives "github.com/berachain/beacon-kit/mod/geth-primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz/merkleizer"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/version"
 )
@@ -66,7 +67,7 @@ func (sp *StateProcessor[
 	}
 
 	if err := st.SetEth1Data(eth1Data.New(
-		common.Bytes32(common.ZeroHash),
+		common.Bytes32(gethprimitives.ZeroHash),
 		0,
 		executionPayloadHeader.GetBlockHash(),
 	)); err != nil {
@@ -111,9 +112,11 @@ func (sp *StateProcessor[
 	}
 
 	var validatorsRoot common.Root
-	validatorsRoot, err = ssz.MerkleizeListComposite[
-		common.ChainSpec, math.U64,
-	](validators, uint64(len(validators)))
+	merkleizer := merkleizer.New[[32]byte, ValidatorT]()
+	validatorsRoot, err = merkleizer.MerkleizeListComposite(
+		validators,
+		uint64(len(validators)),
+	)
 	if err != nil {
 		return nil, err
 	}

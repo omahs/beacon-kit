@@ -20,27 +20,42 @@
 
 package ssz
 
-// Hashable is an interface representing objects that implement HashTreeRoot().
-type Hashable[SpecT any, Root ~[32]byte] interface {
-	HashTreeRoot() (Root, error)
+import "github.com/berachain/beacon-kit/mod/primitives/pkg/ssz/types"
+
+// BaseMerkleizer provides basic merkleization operations for SSZ types.
+type BaseMerkleizer[
+	RootT ~[32]byte, T types.SSZType[T],
+] interface {
+	MerkleizeByteSlice(value []byte) (RootT, error)
+	Merkleize(chunks []RootT, limit ...uint64) (RootT, error)
 }
 
-// U64 is an interface for uint64 types that support
-// NextPowerOfTwo and ILog2Ceil.
-type U64[T ~uint64] interface {
-	~uint64
-	NextPowerOfTwo() T
-	ILog2Ceil() uint8
+// BasicMerkleizer provides merkleization operations for basic SSZ types.
+type BasicMerkleizer[
+	RootT ~[32]byte, T types.SSZType[T],
+] interface {
+	BaseMerkleizer[RootT, T]
+	MerkleizeBasic(value T) (RootT, error)
+	MerkleizeVectorBasic(value []T) (RootT, error)
+	MerkleizeListBasic(value []T, chunkCount uint64) (RootT, error)
 }
 
-// U128LT represents a 128-bit unsigned integer in
-// little-endian byte order.
-type U128LT interface {
-	~[16]byte
+// CompositeMerkleizer provides merkleization operations for composite SSZ
+// types.
+type CompositeMerkleizer[
+	SpecT any, RootT ~[32]byte, T types.SSZType[T],
+] interface {
+	BaseMerkleizer[RootT, T]
+	MerkleizeListComposite(value []T, chunkCount uint64) (RootT, error)
+	MerkleizeVectorCompositeOrContainer(value []T) (RootT, error)
 }
 
-// U256LT represents a 256-bit unsigned integer in
-// little-endian byte order.
-type U256LT interface {
-	~[32]byte
+type VectorMerkleizer[RootT, T any] interface {
+	MerkleizeVectorBasic(value []T) (RootT, error)
+	MerkleizeVectorCompositeOrContainer(value []T) (RootT, error)
+}
+
+type ListMerkleizer[RootT, T any] interface {
+	MerkleizeListBasic(value []T, chunkCount uint64) (RootT, error)
+	MerkleizeListComposite(value []T, chunkCount uint64) (RootT, error)
 }

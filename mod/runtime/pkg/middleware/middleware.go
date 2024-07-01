@@ -41,7 +41,6 @@ import (
 type ABCIMiddleware[
 	AvailabilityStoreT any,
 	BeaconBlockT BeaconBlock[BeaconBlockT],
-	BeaconStateT BeaconState,
 	BlobSidecarsT constraints.SSZMarshallable,
 	DepositT,
 	ExecutionPayloadT any,
@@ -76,6 +75,8 @@ type ABCIMiddleware[
 
 	// Feeds
 	//
+	// genesisBroker is a feed for genesis data.
+	genesisBroker *broker.Broker[*asynctypes.Event[GenesisT]]
 	// blkBroker is a feed for blocks.
 	blkBroker *broker.Broker[*asynctypes.Event[BeaconBlockT]]
 	// sidecarsBroker is a feed for sidecars.
@@ -100,7 +101,6 @@ type ABCIMiddleware[
 func NewABCIMiddleware[
 	AvailabilityStoreT any,
 	BeaconBlockT BeaconBlock[BeaconBlockT],
-	BeaconStateT BeaconState,
 	BlobSidecarsT constraints.SSZMarshallable,
 	DepositT,
 	ExecutionPayloadT any,
@@ -112,16 +112,17 @@ func NewABCIMiddleware[
 	],
 	logger log.Logger[any],
 	telemetrySink TelemetrySink,
+	genesisBroker *broker.Broker[*asynctypes.Event[GenesisT]],
 	blkBroker *broker.Broker[*asynctypes.Event[BeaconBlockT]],
 	sidecarsBroker *broker.Broker[*asynctypes.Event[BlobSidecarsT]],
 	slotBroker *broker.Broker[*asynctypes.Event[math.Slot]],
 	valUpdateSub chan *asynctypes.Event[transition.ValidatorUpdates],
 ) *ABCIMiddleware[
-	AvailabilityStoreT, BeaconBlockT, BeaconStateT,
+	AvailabilityStoreT, BeaconBlockT,
 	BlobSidecarsT, DepositT, ExecutionPayloadT, GenesisT,
 ] {
 	return &ABCIMiddleware[
-		AvailabilityStoreT, BeaconBlockT, BeaconStateT,
+		AvailabilityStoreT, BeaconBlockT,
 		BlobSidecarsT, DepositT, ExecutionPayloadT, GenesisT,
 	]{
 		chainSpec:    chainSpec,
@@ -137,6 +138,7 @@ func NewABCIMiddleware[
 		),
 		logger:         logger,
 		metrics:        newABCIMiddlewareMetrics(telemetrySink),
+		genesisBroker:  genesisBroker,
 		blkBroker:      blkBroker,
 		sidecarsBroker: sidecarsBroker,
 		slotBroker:     slotBroker,
@@ -154,7 +156,7 @@ func NewABCIMiddleware[
 
 // Name returns the name of the middleware.
 func (am *ABCIMiddleware[
-	AvailabilityStoreT, BeaconBlockT, BeaconStateT,
+	AvailabilityStoreT, BeaconBlockT,
 	BlobSidecarsT, DepositT, ExecutionPayloadT, GenesisT,
 ]) Name() string {
 	return "abci-middleware"
@@ -162,7 +164,7 @@ func (am *ABCIMiddleware[
 
 // Start the middleware.
 func (am *ABCIMiddleware[
-	_, _, _, _, _, _, _,
+	_, _, _, _, _, _,
 ]) Start(ctx context.Context) error {
 	subBlkCh, err := am.blkBroker.Subscribe()
 	if err != nil {
@@ -180,7 +182,7 @@ func (am *ABCIMiddleware[
 
 // start starts the middleware.
 func (am *ABCIMiddleware[
-	_, BeaconBlockT, _, BlobSidecarsT, _, _, _,
+	_, BeaconBlockT, BlobSidecarsT, _, _, _,
 ]) start(
 	ctx context.Context,
 	blkCh chan *asynctypes.Event[BeaconBlockT],

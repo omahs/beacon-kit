@@ -21,77 +21,79 @@
 package engineprimitives
 
 import (
-	"sync"
+	"unsafe"
 
-	"github.com/berachain/beacon-kit/mod/errors"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
-	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz/merkleizer"
 )
-
-// byteBuffer is a byte buffer.
-type byteBuffer struct {
-	Bytes []common.Root
-}
-
-// byteBufferPool is a pool of byte buffers.
-//
-//nolint:gochecknoglobals // buffer pool
-var byteBufferPool = sync.Pool{
-	New: func() any {
-		return &byteBuffer{
-			//nolint:mnd // reasonable number of bytes
-			Bytes: make([]common.Root, 0, 256),
-		}
-	},
-}
-
-// getBytes retrieves a byte buffer from the pool.
-func getBytes(size int) *byteBuffer {
-	//nolint:errcheck // its okay.
-	b := byteBufferPool.Get().(*byteBuffer)
-	if b == nil {
-		b = &byteBuffer{
-			Bytes: make([]common.Root, size),
-		}
-	} else {
-		if b.Bytes == nil || cap(b.Bytes) < size {
-			b.Bytes = make([]common.Root, size)
-		}
-		b.Bytes = b.Bytes[:size]
-	}
-	return b
-}
-
-// Reset resets the byte buffer.
-func (b *byteBuffer) Reset() {
-	b.Bytes = b.Bytes[:0]
-}
 
 // Transactions is a typealias for [][]byte, which is how transactions are
 // received in the execution payload.
+//
+// TODO: make it take a generic SpecT type.
 type Transactions [][]byte
 
 // HashTreeRoot returns the hash tree root of the Transactions list.
+//
+// NOTE: Uses a new merkleizer for each call.
 func (txs Transactions) HashTreeRoot() (common.Root, error) {
-	var err error
-	roots := getBytes(len(txs))
-	defer byteBufferPool.Put(roots)
+	return txs.HashTreeRootWith(
+		merkleizer.New[[32]byte, common.Root](),
+	)
+}
 
-	// Ensure roots.Bytes is not nil
-	if roots.Bytes == nil {
-		return common.Root{}, errors.New("failed to allocate byte buffer")
+type BartioTransactions = ssz.List[ssz.Vector[ssz.Byte]]
+
+// BartioTransactionsFromBytes creates a Transactions object from a byte slice.
+func BartioTransactionsFromBytes(data [][]byte) *BartioTransactions {
+	return ssz.ListFromElements(
+		// TODO: Move this value to chain spec.
+		constants.MaxTxsPerPayload,
+		//#nosec:G103 // todo fix later.
+		*(*[]ssz.Vector[ssz.Byte])(unsafe.Pointer(&data))...)
+}
+
+type ProperTransactions = ssz.List[*ssz.List[ssz.Byte]]
+
+// ProperTransactionsFromBytes creates a Transactions object from a byte slice.
+func ProperTransactionsFromBytes(data [][]byte) *ProperTransactions {
+	txs := make([]*ssz.List[ssz.Byte], len(data))
+	for i, tx := range data {
+		//nolint:mnd // unhood later.
+		txs[i] = ssz.ByteListFromBytes(tx, 1073741824)
 	}
 
+	y := ssz.ListFromElements(constants.MaxTxsPerPayload, txs...)
+
+	return ssz.ListFromElements(
+		constants.MaxTxsPerPayload,
+		y.Elements()...,
+	)
+}
+
+// TxsMerkleizer is a ssz merkleizer used for transactions.
+//
+// TODO: make the ChainSpec a generic on this type.
+type TxsMerkleizer merkleizer.Merkleizer[[32]byte, common.Root]
+
+// HashTreeRootWith returns the hash tree root of the Transactions list
+// using the given merkleizer.
+func (txs Transactions) HashTreeRootWith(
+	merkleizer *merkleizer.Merkleizer[[32]byte, common.Root],
+) (common.Root, error) {
+	var (
+		err   error
+		roots = make([]common.Root, len(txs))
+	)
+
 	for i, tx := range txs {
-		roots.Bytes[i], err = ssz.MerkleizeByteSlice[math.U64, common.Root](tx)
+		roots[i], err = merkleizer.MerkleizeByteSlice(tx)
 		if err != nil {
 			return common.Root{}, err
 		}
 	}
 
-	return ssz.MerkleizeListComposite[any, math.U64](
-		roots.Bytes, constants.MaxTxsPerPayload,
-	)
+	return merkleizer.MerkleizeListComposite(roots, constants.MaxTxsPerPayload)
 }

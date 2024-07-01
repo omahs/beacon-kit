@@ -22,10 +22,12 @@ package core
 
 import (
 	"github.com/berachain/beacon-kit/mod/errors"
+	gethprimitives "github.com/berachain/beacon-kit/mod/geth-primitives"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/common"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/constants"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/crypto"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/math"
+	"github.com/berachain/beacon-kit/mod/primitives/pkg/ssz/merkleizer"
 	"github.com/berachain/beacon-kit/mod/primitives/pkg/transition"
 )
 
@@ -50,7 +52,7 @@ type StateProcessor[
 	ContextT Context,
 	DepositT Deposit[ForkDataT, WithdrawalCredentialsT],
 	Eth1DataT interface {
-		New(common.Root, math.U64, common.ExecutionHash) Eth1DataT
+		New(common.Root, math.U64, gethprimitives.ExecutionHash) Eth1DataT
 		GetDepositCount() math.U64
 	},
 	ExecutionPayloadT ExecutionPayload[
@@ -74,6 +76,8 @@ type StateProcessor[
 	executionEngine ExecutionEngine[
 		ExecutionPayloadT, ExecutionPayloadHeaderT, WithdrawalT,
 	]
+	// txsMerkleizer is the merkleizer used for calculating transaction roots.
+	txsMerkleizer *merkleizer.Merkleizer[[32]byte, common.Root]
 }
 
 // NewStateProcessor creates a new state processor.
@@ -97,7 +101,7 @@ func NewStateProcessor[
 	ContextT Context,
 	DepositT Deposit[ForkDataT, WithdrawalCredentialsT],
 	Eth1DataT interface {
-		New(common.Root, math.U64, common.ExecutionHash) Eth1DataT
+		New(common.Root, math.U64, gethprimitives.ExecutionHash) Eth1DataT
 		GetDepositCount() math.U64
 	},
 	ExecutionPayloadT ExecutionPayload[
@@ -133,6 +137,7 @@ func NewStateProcessor[
 		cs:              cs,
 		executionEngine: executionEngine,
 		signer:          signer,
+		txsMerkleizer:   merkleizer.New[[32]byte, common.Root](),
 	}
 }
 
@@ -420,7 +425,7 @@ func (sp *StateProcessor[
 			blk.GetParentBlockRoot(),
 			// state_root is zeroed and overwritten
 			// in the next `process_slot` call.
-			[32]byte{},
+			common.Root{},
 			bodyRoot,
 		),
 	); err != nil {
